@@ -63,7 +63,8 @@ enum class metric_name_t {
     COHERENCE_INVALIDATES,
     PREFETCH_HITS,
     PREFETCH_MISSES,
-    FLUSHES
+    FLUSHES,
+    BASIC_BLOCK_COUNTS
 };
 
 struct bound {
@@ -172,7 +173,8 @@ public:
     virtual void
     reset();
 
-    virtual bool operator!()
+    virtual bool
+    operator!()
     {
         return !success_;
     }

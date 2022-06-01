@@ -10,9 +10,12 @@
 #include "caching_device_stats.h"
 #include "../common/memref.h"
 
+void
+insert_bbcount(std::vector<int_least64_t> &vec, int_least64_t count);
+
 class basic_block_stats_t : public caching_device_stats_t {
 public:
-    explicit basic_block_stats_t(int block_size, const std::string &branch_file = "",
+    explicit basic_block_stats_t(int block_size, const std::string &miss_file = "",
                                  bool warmup_enabled = false, bool is_coherent = false);
     void
     access(const memref_t &memref, bool hit,
@@ -28,7 +31,13 @@ protected:
     void
     print_counts(std::string prefix) override;
 
-    std::vector<int_least64_t> count_per_basic_block_size_;
+    std::vector<int_least64_t> count_per_basic_block_instr_size_;
+    std::vector<int_least64_t> count_per_basic_block_byte_size_;
+
+private:
+    int_least64_t bb_start_addr = 0;
+    int_least64_t bb_end_addr = 0;
+    int_least64_t bb_size_instr = 0;
 };
 
 #endif
