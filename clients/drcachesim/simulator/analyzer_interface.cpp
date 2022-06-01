@@ -145,6 +145,10 @@ drmemtrace_analysis_tool_create()
         return cache_miss_analyzer_create(*knobs, op_miss_count_threshold.get_value(),
                                           op_miss_frac_threshold.get_value(),
                                           op_confidence_threshold.get_value());
+    } else if (op_simulator_type.get_value() == BB_ANALYZER) {
+        cache_simulator_knobs_t *knobs = get_cache_simulator_knobs();
+        printf("WTF NOT COMPLETE");
+        return nullptr;
     } else if (op_simulator_type.get_value() == TLB) {
         tlb_simulator_knobs_t knobs;
         knobs.num_cores = op_num_cores.get_value();
