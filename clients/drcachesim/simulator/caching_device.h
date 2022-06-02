@@ -42,6 +42,7 @@
 
 #include "caching_device_block.h"
 #include "caching_device_stats.h"
+#include "basic_block_stats.h"
 #include "memref.h"
 #include "prefetcher.h"
 

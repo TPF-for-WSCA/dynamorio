@@ -6,9 +6,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cache_simulator.h"
+// #include "cache_simulator.h"
 #include "caching_device_stats.h"
-#include "../common/memref.h"
+// #include "../common/memref.h"
 
 void
 insert_bbcount(std::vector<int_least64_t> &vec, int_least64_t count);
@@ -21,8 +21,11 @@ public:
     access(const memref_t &memref, bool hit,
            caching_device_block_t *cache_block) override;
 
-    virtual void
-    flush(const memref_t &memref);
+    //    virtual void
+    //    flush(const memref_t &memref);
+
+    void
+    print_stats(std::string prefix) override;
 
     void
     reset() override;
@@ -31,13 +34,13 @@ protected:
     // void
     // print_counts(std::string prefix) override;
 
-    std::vector<int_least64_t> count_per_basic_block_instr_size_;
-    std::vector<int_least64_t> count_per_basic_block_byte_size_;
+    std::vector<size_t> count_per_basic_block_instr_size_;
+    std::vector<size_t> count_per_basic_block_byte_size_;
 
 private:
-    int_least64_t bb_start_addr = 0;
-    int_least64_t bb_end_addr = 0;
-    int_least64_t bb_size_instr = 0;
+    size_t bb_start_addr = 0;
+    size_t bb_end_addr = __UINT64_MAX__;
+    size_t bb_size_instr = 0;
 };
 
 #endif
