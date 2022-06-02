@@ -28,8 +28,8 @@ public:
     reset() override;
 
 protected:
-    void
-    print_counts(std::string prefix) override;
+    // void
+    // print_counts(std::string prefix) override;
 
     std::vector<int_least64_t> count_per_basic_block_instr_size_;
     std::vector<int_least64_t> count_per_basic_block_byte_size_;

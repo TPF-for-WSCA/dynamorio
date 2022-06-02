@@ -114,6 +114,7 @@ add_exported_library(drmemtrace_simulator STATIC
   simulator/cache_miss_analyzer.cpp
   simulator/caching_device.cpp
   simulator/caching_device_stats.cpp
+  simulator/basic_block_stats.cpp
   simulator/cache_stats.cpp
   simulator/prefetcher.cpp
   simulator/cache_simulator.cpp
