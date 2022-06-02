@@ -26,6 +26,7 @@ basic_block_stats_t::basic_block_stats_t(int block_size, const std::string &miss
     : caching_device_stats_t(miss_file, block_size, warmup_enabled, is_coherent)
     , count_per_basic_block_instr_size_(block_size)
     , count_per_basic_block_byte_size_(block_size)
+
 {
     // TODO: stats map is expecting long ints. We might not need this
     //    stats_map_.emplace(metric_name_t::BASIC_BLOCK_COUNTS,
@@ -36,6 +37,8 @@ void
 basic_block_stats_t::access(const memref_t &memref, bool hit,
                             caching_device_block_t *cache_block)
 {
+    caching_device_stats_t::access(memref, hit, cache_block);
+
     if (type_is_prefetch(memref.data.type)) {
         return; // we only care about basic blocks
     }
@@ -111,11 +114,14 @@ basic_block_stats_t::print_stats(std::string prefix)
         std::cout << prefix << "    " << it - count_per_basic_block_instr_size_.begin()
                   << ": " << *it << std::endl;
     }
+
+    caching_device_stats_t::print_stats(prefix);
 }
 
 void
 basic_block_stats_t::reset()
 {
+    caching_device_stats_t::reset();
     // TODO: Fixup missing variables
     num_hits_at_reset_ = num_hits_;
     num_misses_at_reset_ = num_misses_;
@@ -135,4 +141,4 @@ basic_block_stats_t::reset()
 // basic_block_stats_t::flush(const memref_t &memref)
 //{
 //
-// }
+//}
