@@ -1,6 +1,8 @@
 #ifndef _BB_ANALYZER_H_
 #define _BB_ANALYZER_H_
 
+#define MAX_X86_INSTR_SIZE 13
+
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -38,9 +40,9 @@ protected:
     std::vector<size_t> count_per_basic_block_byte_size_;
 
 private:
-    size_t bb_start_addr = 0;
-    size_t bb_end_addr = __UINT64_MAX__;
+    size_t max_instr_size = 0;
     size_t bb_size_instr = 0;
+    size_t bb_size_bytes = 0;
 };
 
 #endif

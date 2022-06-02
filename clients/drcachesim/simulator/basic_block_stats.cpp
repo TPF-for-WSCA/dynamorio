@@ -40,40 +40,44 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         return; // we only care about basic blocks
     }
 
+    if (memref.data.type == TRACE_TYPE_THREAD ||
+        memref.data.type == TRACE_TYPE_THREAD_EXIT) {
+        printf("WARN: we do not expect thread entries in this part of the reader. Still "
+               "we saw one. Ignoring\n");
+        return;
+    }
+
     bool is_instr_ = type_is_instr(memref.data.type);
 
     // count number of instructions in basic block
     if (is_instr_) {
         bb_size_instr++;
+        bb_size_bytes += memref.data.size;
+
+        if ((MAX_X86_INSTR_SIZE < (bb_size_bytes / (float)bb_size_instr))) {
+            printf("WARN: SUCH LARGE x86 INSTRUCTIONS DO NOT EXIST: %10.2f\n",
+                   bb_size_bytes / (float)bb_size_instr);
+        }
+
+        if (MAX_X86_INSTR_SIZE < memref.data.size) {
+            printf("WARN: SUCH LARGE x86 INSTRUCTIONS DO NOT EXIST: %lu\n",
+                   memref.data.size);
+        }
+
+        if (max_instr_size < memref.data.size) {
+            max_instr_size = memref.data.size;
+        }
     }
 
     // calculate number of bytes in instruction based on addresses.
     if (type_is_instr_branch(memref.data.type)) {
-        // TODO: Fetch address from branching information file.
-        bb_end_addr = memref.data.addr;
-        if (bb_end_addr < bb_start_addr) {
-            printf("PANIC\n");
-            printf("bbsize: %lu\n", bb_end_addr - bb_start_addr);
-            printf("bb_size_instr: %lu\n", bb_size_instr);
-            printf("IGNORING\n");
+        // assuming x86, instructions in basic blocks have monotoneously increasing
+        // addresses
+        insert_bbcount(count_per_basic_block_byte_size_, bb_size_bytes);
+        insert_bbcount(count_per_basic_block_instr_size_, bb_size_instr);
 
-            bb_start_addr = 0;
-            bb_size_instr = 0;
-            return;
-        }
-
-        if (bb_start_addr != 0) {
-            size_t bbsize = bb_end_addr - bb_start_addr;
-            // assuming x86, instructions in basic blocks have monotoneously increasing
-            // addresses
-            insert_bbcount(count_per_basic_block_byte_size_, bbsize);
-            insert_bbcount(count_per_basic_block_instr_size_, bb_size_instr);
-        }
-        bb_start_addr = 0;
+        bb_size_bytes = 0;
         bb_size_instr = 0;
-    } else if (is_instr_ && bb_start_addr == 0 && bb_end_addr != 0) {
-        // We're the first address getting fetched after the first jump
-        bb_start_addr = memref.data.addr;
     }
 }
 
@@ -91,6 +95,8 @@ basic_block_stats_t::print_stats(std::string prefix)
 {
     trim_vector(count_per_basic_block_byte_size_);
     trim_vector(count_per_basic_block_instr_size_);
+
+    std::cout << "Max instr size: " << max_instr_size << std::endl;
 
     std::cout << prefix << "bb byte size:" << std::endl;
     for (auto it = count_per_basic_block_byte_size_.begin();
@@ -110,6 +116,7 @@ basic_block_stats_t::print_stats(std::string prefix)
 void
 basic_block_stats_t::reset()
 {
+    // TODO: Fixup missing variables
     num_hits_at_reset_ = num_hits_;
     num_misses_at_reset_ = num_misses_;
     num_child_hits_at_reset_ = num_child_hits_;
@@ -121,8 +128,6 @@ basic_block_stats_t::reset()
     num_coherence_invalidates_ = 0;
     count_per_basic_block_byte_size_.clear();
     count_per_basic_block_instr_size_.clear();
-    bb_end_addr = __INT64_MAX__;
-    bb_start_addr = 0;
     bb_size_instr = 0;
 }
 
