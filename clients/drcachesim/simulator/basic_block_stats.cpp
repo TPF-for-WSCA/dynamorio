@@ -59,6 +59,7 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
 
     bool is_instr_ = type_is_instr(memref.data.type);
     bool is_branch_ = type_is_instr_branch(memref.data.type);
+    bool is_interrupt_ = false;
 
     // count number of instructions in basic block
     if (is_instr_) {
@@ -85,13 +86,14 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         }
 
         if (current_block.end_addr == 0 ||
-            memref.data.addr <= current_block.end_addr + 13) {
+            ((int64_t)(current_block.end_addr - memref.data.addr)) <= 13) {
             // x86 instrs can take up a max of 13 bytes, hence we assume a single basic
             // block if the address does not differ by more than this
             current_block.end_addr = memref.data.addr;
         } else {
             // NOT 0 and NOT close by - we might have been interrupted by the OS
             is_branch_ = true;
+            is_interrupt_ = true;
         }
     }
 
@@ -99,10 +101,10 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
     if (is_branch_) {
         // assuming x86, instructions in basic blocks have monotoneously increasing
         // addresses
-        if (current_block.starting_addr <= current_block.end_addr) {
+        if (current_block.starting_addr <= current_block.end_addr &&
+            current_block.starting_addr != 0) {
             record_block(current_block);
         } else {
-            // TODO: we see lots of mismatches that should not happen
             printf("WARN: ADDRESS MISMATCH, BLOCK END IS SMALLER THAN BLOCK START\n");
         }
         insert_bbcount(count_per_basic_block_byte_size_, current_block.byte_size);
@@ -111,8 +113,12 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         // current_block = { .starting_addr = 0, .end_addr = 0 };
         current_block.byte_size = 0;
         current_block.instr_size = 0;
-        current_block.starting_addr = memref.data.addr;
+        current_block.starting_addr = 0;
         current_block.end_addr = 0;
+    }
+
+    if (is_interrupt_) {
+        current_block.starting_addr = memref.data.addr;
     }
 }
 
@@ -187,7 +193,7 @@ basic_block_stats_t::record_block(const BasicBlock &bb)
 
     if (bb.end_addr > target_bb.end_addr) {
         printf("WARN: BLOCK ENDS EXTENDS - SHOULD NEVER HAPPEN AS WE ALWAYS FINISH BB AT "
-               "BRANCHING INSTR");
+               "BRANCHING INSTR\n");
         target_bb.end_addr = bb.end_addr;
     }
 
