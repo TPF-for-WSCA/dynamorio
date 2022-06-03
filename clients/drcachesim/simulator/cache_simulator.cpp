@@ -141,8 +141,8 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
 
         if (!l1_icaches_[i]->init(
                 knobs_.L1I_assoc, (int)knobs_.line_size, (int)knobs_.L1I_size, llc,
-                new basic_block_stats_t((int)knobs_.line_size, "", warmup_enabled_,
-                                        knobs_.model_coherence),
+                new basic_block_stats_t((int)knobs_.line_size, "", knobs.data_dir,
+                                        warmup_enabled_, knobs_.model_coherence),
                 nullptr /*prefetcher*/, false /*inclusive*/, knobs_.model_coherence,
                 2 * i, snoop_filter_) ||
             !l1_dcaches_[i]->init(

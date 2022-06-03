@@ -771,7 +771,7 @@ set(BASE_CONLY_FLAGS "")
 set(BASE_CXXONLY_FLAGS "")
 CHECK_CXX_COMPILER_FLAG("-std=c++17" cxx17_available)
 if (UNIX)
-  set(BASE_CXXONLY_FLAGS "${BASE_CXXONLY_FLAGS} -std=c++11")
+  set(BASE_CXXONLY_FLAGS "${BASE_CXXONLY_FLAGS} -std=c++17")
   # -std=c99 doesn't quite work
   # FIXME case 191480: we used to pass -pedantic just to cpp;
   # now w/ no separate cpp step we should eliminate the

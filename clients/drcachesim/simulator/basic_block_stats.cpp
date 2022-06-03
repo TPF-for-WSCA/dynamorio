@@ -5,6 +5,13 @@
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
+bool
+operator==(const BasicBlock &lhs, const BasicBlock &rhs)
+{
+    return (rhs.starting_addr <= lhs.starting_addr && lhs.end_addr <= rhs.end_addr) ||
+        (lhs.starting_addr <= rhs.starting_addr && rhs.end_addr <= lhs.end_addr);
+}
+
 void
 insert_bbcount(std::vector<size_t> &vec, size_t count)
 {
@@ -22,15 +29,15 @@ insert_bbcount(std::vector<size_t> &vec, size_t count)
 }
 
 basic_block_stats_t::basic_block_stats_t(int block_size, const std::string &miss_file,
+                                         const std::string &output_dir,
                                          bool warmup_enabled, bool is_coherent)
     : caching_device_stats_t(miss_file, block_size, warmup_enabled, is_coherent)
     , count_per_basic_block_instr_size_(block_size)
     , count_per_basic_block_byte_size_(block_size)
-
+    , basic_block_size_history(10000)
+    , basic_blocks_hit_count(10000)
+    , current_block({ 0, 0, 0, 0 })
 {
-    // TODO: stats map is expecting long ints. We might not need this
-    //    stats_map_.emplace(metric_name_t::BASIC_BLOCK_COUNTS,
-    //                       count_per_basic_block_byte_size_);
 }
 
 void
@@ -51,15 +58,17 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
     }
 
     bool is_instr_ = type_is_instr(memref.data.type);
+    bool is_branch_ = type_is_instr_branch(memref.data.type);
 
     // count number of instructions in basic block
     if (is_instr_) {
-        bb_size_instr++;
-        bb_size_bytes += memref.data.size;
+        current_block.instr_size++;
+        current_block.byte_size += memref.data.size;
 
-        if ((MAX_X86_INSTR_SIZE < (bb_size_bytes / (float)bb_size_instr))) {
+        if ((MAX_X86_INSTR_SIZE <
+             (current_block.byte_size / (float)current_block.instr_size))) {
             printf("WARN: SUCH LARGE x86 INSTRUCTIONS DO NOT EXIST: %10.2f\n",
-                   bb_size_bytes / (float)bb_size_instr);
+                   current_block.byte_size / (float)current_block.instr_size);
         }
 
         if (MAX_X86_INSTR_SIZE < memref.data.size) {
@@ -70,18 +79,121 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         if (max_instr_size < memref.data.size) {
             max_instr_size = memref.data.size;
         }
+
+        if (current_block.starting_addr == 0) {
+            current_block.starting_addr = memref.data.addr;
+        }
+
+        if (current_block.end_addr == 0 ||
+            memref.data.addr <= current_block.end_addr + 13) {
+            // x86 instrs can take up a max of 13 bytes, hence we assume a single basic
+            // block if the address does not differ by more than this
+            current_block.end_addr = memref.data.addr;
+        } else {
+            // NOT 0 and NOT close by - we might have been interrupted by the OS
+            is_branch_ = true;
+        }
     }
 
     // calculate number of bytes in instruction based on addresses.
-    if (type_is_instr_branch(memref.data.type)) {
+    if (is_branch_) {
         // assuming x86, instructions in basic blocks have monotoneously increasing
         // addresses
-        insert_bbcount(count_per_basic_block_byte_size_, bb_size_bytes);
-        insert_bbcount(count_per_basic_block_instr_size_, bb_size_instr);
+        if (current_block.starting_addr <= current_block.end_addr) {
+            record_block(current_block);
+        } else {
+            // TODO: we see lots of mismatches that should not happen
+            printf("WARN: ADDRESS MISMATCH, BLOCK END IS SMALLER THAN BLOCK START\n");
+        }
+        insert_bbcount(count_per_basic_block_byte_size_, current_block.byte_size);
+        insert_bbcount(count_per_basic_block_instr_size_, current_block.instr_size);
 
-        bb_size_bytes = 0;
-        bb_size_instr = 0;
+        // current_block = { .starting_addr = 0, .end_addr = 0 };
+        current_block.byte_size = 0;
+        current_block.instr_size = 0;
+        current_block.starting_addr = memref.data.addr;
+        current_block.end_addr = 0;
     }
+}
+
+void
+print_type(trace_type_t type)
+{
+    switch (type) {
+    case TRACE_TYPE_READ: printf("READ\n"); break;
+    case TRACE_TYPE_WRITE: printf("WRITE\n"); break;
+    case TRACE_TYPE_PREFETCH: printf("PREFETCH\n"); break;
+    // X86 specific prefetch
+    case TRACE_TYPE_PREFETCHT0: printf("PREFETCHT0\n"); break;
+    case TRACE_TYPE_PREFETCHT1: printf("PREFETCHT1\n"); break;
+    case TRACE_TYPE_PREFETCHT2: printf("PREFETCHT2\n"); break;
+    case TRACE_TYPE_PREFETCHNTA: printf("PREFETCHNTA\n"); break;
+    case TRACE_TYPE_PREFETCH_READ: printf("PREFETCH_READ\n"); break;
+    case TRACE_TYPE_PREFETCH_WRITE: printf("PREFETCH_WRITE\n"); break;
+    case TRACE_TYPE_PREFETCH_INSTR: printf("PREFETCH_INSTR\n"); break;
+    case TRACE_TYPE_INSTR: printf("INSTR\n"); break;
+    case TRACE_TYPE_INSTR_DIRECT_JUMP: printf("INSTR_DIRECT_JUMP\n"); break;
+    case TRACE_TYPE_INSTR_INDIRECT_JUMP: printf("INSTR_INDIRECT_JUMP\n"); break;
+    case TRACE_TYPE_INSTR_CONDITIONAL_JUMP: printf("INSTR_CONDITIONAL_JUMP\n"); break;
+    case TRACE_TYPE_INSTR_DIRECT_CALL: printf("INSTR_DIRECT_CALL\n"); break;
+    case TRACE_TYPE_INSTR_INDIRECT_CALL: printf("INSTR_INDIRECT_CALL\n"); break;
+    case TRACE_TYPE_INSTR_RETURN: printf("INSTR_RETURN\n"); break;
+    case TRACE_TYPE_INSTR_BUNDLE: printf("INSTR_BUNDLE\n"); break;
+    case TRACE_TYPE_INSTR_FLUSH: printf("INSTR_FLUSH\n"); break;
+    case TRACE_TYPE_INSTR_FLUSH_END: printf("INSTR_FLUSH_END\n"); break;
+    case TRACE_TYPE_DATA_FLUSH: printf("DATA_FLUSH\n"); break;
+    case TRACE_TYPE_DATA_FLUSH_END: printf("DATA_FLUSH_END\n"); break;
+    case TRACE_TYPE_THREAD: printf("THREAD\n"); break;
+    case TRACE_TYPE_MARKER: printf("MARKER\n"); break;
+    case TRACE_TYPE_THREAD_EXIT: printf("THREAD_EXIT\n"); break;
+    case TRACE_TYPE_PID: printf("PID\n"); break;
+    case TRACE_TYPE_HEADER: printf("HEADER\n"); break;
+    case TRACE_TYPE_FOOTER: printf("FOOTER\n"); break;
+    case TRACE_TYPE_HARDWARE_PREFETCH: printf("HARDWARE_PREFETCH\n"); break;
+    case TRACE_TYPE_INSTR_MAYBE_FETCH: printf("INSTR_MAYBE_FETCH\n"); break;
+    case TRACE_TYPE_INSTR_SYSENTER: printf("INSTR_SYSENTER\n"); break;
+    case TRACE_TYPE_PREFETCH_READ_L1_NT: printf("PREFETCH_READ_L1_NT\n"); break;
+    case TRACE_TYPE_PREFETCH_READ_L2_NT: printf("PREFETCH_READ_L2_NT\n"); break;
+    case TRACE_TYPE_PREFETCH_READ_L3_NT: printf("PREFETCH_READ_L3_NT\n"); break;
+    case TRACE_TYPE_PREFETCH_INSTR_L1_NT: printf("PREFETCH_INSTR_L1_NT\n"); break;
+    case TRACE_TYPE_PREFETCH_INSTR_L2: printf("PREFETCH_INSTR_L2\n"); break;
+    case TRACE_TYPE_PREFETCH_INSTR_L2_NT: printf("PREFETCH_INSTR_L2_NT\n"); break;
+    case TRACE_TYPE_PREFETCH_INSTR_L3: printf("PREFETCH_INSTR_L3\n"); break;
+    case TRACE_TYPE_PREFETCH_INSTR_L3_NT: printf("PREFETCH_INSTR_L3_NT\n"); break;
+    case TRACE_TYPE_PREFETCH_WRITE_L1_NT: printf("PREFETCH_WRITE_L1_NT\n"); break;
+    case TRACE_TYPE_PREFETCH_WRITE_L2: printf("PREFETCH_WRITE_L2\n"); break;
+    case TRACE_TYPE_PREFETCH_WRITE_L2_NT: printf("PREFETCH_WRITE_L2_NT\n"); break;
+    case TRACE_TYPE_PREFETCH_WRITE_L3: printf("PREFETCH_WRITE_L3\n"); break;
+    case TRACE_TYPE_PREFETCH_WRITE_L3_NT: printf("PREFETCH_WRITE_L3_NT\n"); break;
+    default: printf("NOT HANDLED CASE OF %d\n", type); break;
+    }
+}
+
+void
+basic_block_stats_t::record_block(const BasicBlock &bb)
+{
+    auto target_bb_node = basic_blocks_hit_count.extract(bb);
+    if (target_bb_node.empty()) {
+        basic_blocks_hit_count.insert({ bb, 1 });
+        return;
+    }
+
+    // key and value both return references
+    auto target_bb = target_bb_node.key();
+    BasicBlock merged_bb = target_bb;
+    if (bb.starting_addr < target_bb.starting_addr) {
+        merged_bb.starting_addr = bb.starting_addr;
+    }
+
+    if (bb.end_addr > target_bb.end_addr) {
+        printf("WARN: BLOCK ENDS EXTENDS - SHOULD NEVER HAPPEN AS WE ALWAYS FINISH BB AT "
+               "BRANCHING INSTR");
+        target_bb.end_addr = bb.end_addr;
+    }
+
+    target_bb_node.mapped() += 1;
+
+    basic_blocks_hit_count.insert(move(target_bb_node));
 }
 
 void
@@ -134,7 +246,9 @@ basic_block_stats_t::reset()
     num_coherence_invalidates_ = 0;
     count_per_basic_block_byte_size_.clear();
     count_per_basic_block_instr_size_.clear();
-    bb_size_instr = 0;
+    current_block = {
+        .starting_addr = 0, .end_addr = 0, .instr_size = 0, .byte_size = 0
+    };
 }
 
 // void
