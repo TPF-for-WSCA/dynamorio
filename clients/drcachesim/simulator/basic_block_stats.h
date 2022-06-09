@@ -16,6 +16,7 @@ struct BasicBlock {
     addr_t end_addr;
     size_t instr_size;
     size_t byte_size;
+    mutable size_t hits = 1;
 };
 
 void
@@ -23,6 +24,15 @@ print_type(trace_type_t type);
 
 bool
 operator==(const BasicBlock &lhs, const BasicBlock &rhs);
+
+struct BBLessThanBasic {
+    inline bool
+    operator()(const BasicBlock &lhs, const BasicBlock &rhs) const
+    {
+        return lhs.starting_addr <
+            rhs.starting_addr; // assuming that we always exit a bb at a branch
+    }
+};
 
 namespace std {
 template <> struct hash<BasicBlock> {
@@ -60,6 +70,8 @@ protected:
     std::vector<size_t> count_per_basic_block_byte_size_;
     std::vector<size_t> basic_block_size_history;
     std::unordered_map<BasicBlock, size_t> basic_blocks_hit_count;
+    std::unordered_map<addr_t, std::set<BasicBlock, BBLessThanBasic>>
+        number_of_bytes_accessed;
 
 private:
     void
@@ -67,6 +79,8 @@ private:
 
     size_t max_instr_size = 0;
     BasicBlock current_block;
+    size_t max_memory_consumption = 0;
+    static const size_t cache_block_address_mask = 0xFFFFFFC0;
 };
 
 #endif

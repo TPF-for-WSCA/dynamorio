@@ -2,6 +2,38 @@
 #include <iomanip>
 #include <cassert>
 #include "basic_block_stats.h"
+// DEBUGGING IMPORTS: HOW MUCH MEMORY DO WE USE
+#include "stdlib.h"
+#include "string.h"
+
+int
+parseLine(char *line)
+{
+    int i = strlen(line);
+    const char *p = line;
+    while (*p < '0' || *p > '9')
+        p++;
+    line[i - 3] = '\0';
+    i = atoi(p);
+    return i;
+}
+
+int
+getPhysicalRAMUsageValue()
+{
+    FILE *file = fopen("/proc/self/status", "r");
+    int result = -1;
+    char line[128];
+
+    while (fgets(line, 128, file) != NULL) {
+        if (strncmp(line, "VmRSS:", 6) == 0) {
+            result = parseLine(line);
+            break;
+        }
+    }
+    fclose(file);
+    return result;
+}
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
@@ -34,10 +66,12 @@ basic_block_stats_t::basic_block_stats_t(int block_size, const std::string &miss
     : caching_device_stats_t(miss_file, block_size, warmup_enabled, is_coherent)
     , count_per_basic_block_instr_size_(block_size)
     , count_per_basic_block_byte_size_(block_size)
-    , basic_block_size_history(10000)
-    , basic_blocks_hit_count(10000)
+    , basic_block_size_history(0)
+    , basic_blocks_hit_count(0)
     , current_block({ 0, 0, 0, 0 })
 {
+    basic_block_size_history.reserve(10000);
+    basic_blocks_hit_count.reserve(10000);
 }
 
 void
@@ -46,7 +80,13 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
 {
     caching_device_stats_t::access(memref, hit, cache_block);
 
+    // size_t current_ram_consumption = getPhysicalRAMUsageValue() >> 10;
+    // if (max_memory_consumption < current_ram_consumption) {
+    //     std::cout << "CURRENT RAM: " << current_ram_consumption << " MB" << std::endl;
+    // }
+
     if (type_is_prefetch(memref.data.type)) {
+        std::cout << "YES SAW A PREFETCH" << std::endl;
         return; // we only care about basic blocks
     }
 
@@ -110,6 +150,36 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         insert_bbcount(count_per_basic_block_byte_size_, current_block.byte_size);
         insert_bbcount(count_per_basic_block_instr_size_, current_block.instr_size);
 
+        basic_blocks_hit_count[current_block] += 1;
+        basic_block_size_history.push_back(current_block.byte_size);
+        addr_t cacheline_start_address =
+            cache_block_address_mask & current_block.starting_addr;
+        addr_t cacheline_end_address = cache_block_address_mask & current_block.end_addr;
+
+        //       if (cacheline_start_address != cacheline_end_address) {
+        //           std::cout << "WE NEED TO HANDLE THIS CASE: BASIC BLOCK OVERLAPS CACHE
+        //           BLOCK "
+        //                        "BOUNDARIES"
+        //                     << std::endl;
+        //           std::cout << "Spanning cache blocks: "
+        //                     << (cacheline_end_address - cacheline_start_address) / 64
+        //                     << std::endl;
+        //       }
+
+        auto basic_block_set = number_of_bytes_accessed[cacheline_start_address];
+        auto bb_entry = basic_block_set.find(current_block);
+        if (bb_entry == basic_block_set.end()) {
+            basic_block_set.insert(current_block);
+        } else {
+            bb_entry->hits += 1;
+        }
+
+        if (basic_block_size_history.size() == basic_block_size_history.capacity()) {
+            basic_block_size_history.reserve(basic_block_size_history.capacity() * 2);
+            size_t current_ram_consumption = getPhysicalRAMUsageValue() >> 10;
+            // how much memory do I consume?
+            std::cout << "CURRENT RAM: " << current_ram_consumption << " MB" << std::endl;
+        }
         // current_block = { .starting_addr = 0, .end_addr = 0 };
         current_block.byte_size = 0;
         current_block.instr_size = 0;
@@ -119,6 +189,10 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
 
     if (is_interrupt_) {
         current_block.starting_addr = memref.data.addr;
+    }
+
+    if (!is_branch_ && !is_instr_) {
+        print_type(memref.data.type);
     }
 }
 
@@ -218,6 +292,7 @@ basic_block_stats_t::print_stats(std::string prefix)
     trim_vector(count_per_basic_block_instr_size_);
 
     std::cout << "Max instr size: " << max_instr_size << std::endl;
+    std::cout << "Num instructions:" << basic_block_size_history.size() << std::endl;
 
     std::cout << prefix << "bb byte size:" << std::endl;
     for (auto it = count_per_basic_block_byte_size_.begin();
