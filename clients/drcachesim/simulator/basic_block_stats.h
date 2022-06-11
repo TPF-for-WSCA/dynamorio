@@ -1,7 +1,7 @@
 #ifndef _BB_ANALYZER_H_
 #define _BB_ANALYZER_H_
 
-#define MAX_X86_INSTR_SIZE 13
+#define MAX_X86_INSTR_SIZE 15
 
 #include <cstdint>
 #include <string>
@@ -17,6 +17,7 @@ struct BasicBlock {
     size_t instr_size;
     size_t byte_size;
     mutable size_t hits = 1;
+    mutable bool miss = true;
 };
 
 void
@@ -29,8 +30,8 @@ struct BBLessThanBasic {
     inline bool
     operator()(const BasicBlock &lhs, const BasicBlock &rhs) const
     {
-        return lhs.starting_addr <
-            rhs.starting_addr; // assuming that we always exit a bb at a branch
+        return lhs.end_addr <
+            rhs.end_addr; // assuming that we always exit a bb at a branch
     }
 };
 
@@ -70,17 +71,26 @@ protected:
     std::vector<size_t> count_per_basic_block_byte_size_;
     std::vector<size_t> basic_block_size_history;
     std::unordered_map<BasicBlock, size_t> basic_blocks_hit_count;
-    std::unordered_map<addr_t, std::set<BasicBlock, BBLessThanBasic>>
-        number_of_bytes_accessed;
+    std::unordered_map<addr_t, std::vector<BasicBlock>> number_of_bytes_accessed;
 
 private:
     void
     record_block(const BasicBlock &bb);
+    bool
+    handle_instr(const memref_t &memeref, bool hit);
+    void
+    handle_branch(const memref_t &memref);
+    void
+    handle_interrupt(const memref_t &memref, bool hit);
 
+    void
+    track_cacheline_access(const memref_t &memref);
+
+    size_t max_cacheline_bb = 0;
     size_t max_instr_size = 0;
     BasicBlock current_block;
     size_t max_memory_consumption = 0;
-    static const size_t cache_block_address_mask = 0xFFFFFFC0;
+    static const size_t cache_block_address_mask = 0xFFFFFFFFFFFFFFC0;
 };
 
 #endif

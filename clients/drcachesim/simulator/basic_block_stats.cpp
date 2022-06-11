@@ -1,6 +1,8 @@
 #include <iostream>
 #include <iomanip>
 #include <cassert>
+#include <algorithm>
+
 #include "basic_block_stats.h"
 // DEBUGGING IMPORTS: HOW MUCH MEMORY DO WE USE
 #include "stdlib.h"
@@ -74,6 +76,122 @@ basic_block_stats_t::basic_block_stats_t(int block_size, const std::string &miss
     basic_blocks_hit_count.reserve(10000);
 }
 
+bool
+basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
+{
+    bool is_interrupt_ = false;
+    if (current_block.starting_addr == 0) {
+        current_block.miss = !hit;
+        current_block.starting_addr = memref.data.addr;
+        current_block.end_addr = memref.data.addr;
+    }
+
+    if ((memref.data.addr - current_block.end_addr) <= MAX_X86_INSTR_SIZE) {
+        // x86 instrs can take up a max of 15 bytes, hence we assume a single basic
+        // block if the address does not differ by more than this
+        current_block.instr_size++;
+        current_block.byte_size += memref.data.size;
+        current_block.end_addr = memref.data.addr;
+    } else {
+        // We moved more than the size of any allowed x86 instruction - we must have been
+        // interrupted
+        is_interrupt_ = true;
+    }
+    if ((MAX_X86_INSTR_SIZE <
+         (current_block.byte_size / (float)current_block.instr_size))) {
+        printf("WARN: SUCH LARGE x86 INSTRUCTIONS DO NOT EXIST: %10.2f\n",
+               current_block.byte_size / (float)current_block.instr_size);
+    }
+
+    if (MAX_X86_INSTR_SIZE < memref.data.size) {
+        printf("WARN: SUCH LARGE x86 INSTRUCTIONS DO NOT EXIST: %lu\n", memref.data.size);
+    }
+
+    if (max_instr_size < memref.data.size) {
+        max_instr_size = memref.data.size;
+    }
+    return is_interrupt_;
+}
+
+void
+basic_block_stats_t::track_cacheline_access(const memref_t &memref)
+{
+    addr_t cacheline_start_address =
+        cache_block_address_mask & current_block.starting_addr;
+    addr_t cacheline_end_address = cache_block_address_mask &
+        (current_block.starting_addr + current_block.byte_size);
+
+    if (cacheline_end_address - cacheline_start_address > max_cacheline_bb) {
+        max_cacheline_bb = cacheline_end_address - cacheline_start_address;
+        std::cout << "Current largest overlap of a basic block: " << max_cacheline_bb / 64
+                  << " lines" << std::endl;
+    }
+
+    for (; cacheline_start_address <= cacheline_end_address;
+         cacheline_start_address += 64) {
+        auto basic_block_vec = number_of_bytes_accessed[cacheline_start_address];
+        if (current_block.miss) {
+            basic_block_vec.push_back(current_block);
+        } else {
+            auto is_same_block = [this](const BasicBlock &bb) {
+                return (bb.starting_addr == current_block.starting_addr) &&
+                    (bb.end_addr == current_block.end_addr);
+            };
+            auto bb_entry = std::find_if(basic_block_vec.rbegin(), basic_block_vec.rend(),
+                                         is_same_block);
+
+            if (bb_entry == basic_block_vec.rend()) {
+                basic_block_vec.push_back(current_block);
+            } else {
+                bb_entry->hits += 1;
+            }
+        }
+        number_of_bytes_accessed[cacheline_start_address] = basic_block_vec;
+    }
+}
+
+void
+basic_block_stats_t::handle_branch(const memref_t &memref)
+{
+    // assuming x86, instructions in basic blocks have monotoneously increasing
+    // addresses
+    if (current_block.starting_addr <= current_block.end_addr &&
+        current_block.starting_addr != 0) {
+        record_block(current_block);
+    } else {
+        printf("WARN: ADDRESS MISMATCH, BLOCK END IS SMALLER THAN BLOCK START\n");
+    }
+    insert_bbcount(count_per_basic_block_byte_size_, current_block.byte_size);
+    insert_bbcount(count_per_basic_block_instr_size_, current_block.instr_size);
+
+    basic_blocks_hit_count[current_block] += 1;
+    basic_block_size_history.push_back(current_block.byte_size);
+
+    track_cacheline_access(memref);
+
+    if (basic_block_size_history.size() == basic_block_size_history.capacity()) {
+        basic_block_size_history.reserve(basic_block_size_history.capacity() * 2);
+        size_t current_ram_consumption = getPhysicalRAMUsageValue() >> 10;
+        // how much memory do I consume?
+        std::cout << "CURRENT RAM: " << current_ram_consumption << " MB" << std::endl;
+    }
+    // current_block = { .starting_addr = 0, .end_addr = 0 };
+    current_block.byte_size = 0;
+    current_block.instr_size = 0;
+    current_block.starting_addr = 0;
+    current_block.end_addr = 0;
+}
+
+void
+basic_block_stats_t::handle_interrupt(const memref_t &memref, bool hit)
+{
+    current_block.starting_addr = memref.data.addr;
+    current_block.end_addr = memref.data.addr;
+    current_block.byte_size = memref.data.size;
+    current_block.instr_size = 1;
+    current_block.miss = !hit;
+}
+
 void
 basic_block_stats_t::access(const memref_t &memref, bool hit,
                             caching_device_block_t *cache_block)
@@ -99,100 +217,28 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
 
     bool is_instr_ = type_is_instr(memref.data.type);
     bool is_branch_ = type_is_instr_branch(memref.data.type);
+
+    if (!is_branch_ && !is_instr_) {
+        print_type(memref.data.type);
+        return; // we do not care about anything that is not an instruction and not a
+                // branch
+    }
+
     bool is_interrupt_ = false;
 
     // count number of instructions in basic block
     if (is_instr_) {
-        current_block.instr_size++;
-        current_block.byte_size += memref.data.size;
-
-        if ((MAX_X86_INSTR_SIZE <
-             (current_block.byte_size / (float)current_block.instr_size))) {
-            printf("WARN: SUCH LARGE x86 INSTRUCTIONS DO NOT EXIST: %10.2f\n",
-                   current_block.byte_size / (float)current_block.instr_size);
-        }
-
-        if (MAX_X86_INSTR_SIZE < memref.data.size) {
-            printf("WARN: SUCH LARGE x86 INSTRUCTIONS DO NOT EXIST: %lu\n",
-                   memref.data.size);
-        }
-
-        if (max_instr_size < memref.data.size) {
-            max_instr_size = memref.data.size;
-        }
-
-        if (current_block.starting_addr == 0) {
-            current_block.starting_addr = memref.data.addr;
-        }
-
-        if (current_block.end_addr == 0 ||
-            ((int64_t)(current_block.end_addr - memref.data.addr)) <= 13) {
-            // x86 instrs can take up a max of 13 bytes, hence we assume a single basic
-            // block if the address does not differ by more than this
-            current_block.end_addr = memref.data.addr;
-        } else {
-            // NOT 0 and NOT close by - we might have been interrupted by the OS
-            is_branch_ = true;
-            is_interrupt_ = true;
-        }
+        is_interrupt_ = handle_instr(memref, hit);
+        is_branch_ = is_branch_ || is_interrupt_;
     }
 
     // calculate number of bytes in instruction based on addresses.
     if (is_branch_) {
-        // assuming x86, instructions in basic blocks have monotoneously increasing
-        // addresses
-        if (current_block.starting_addr <= current_block.end_addr &&
-            current_block.starting_addr != 0) {
-            record_block(current_block);
-        } else {
-            printf("WARN: ADDRESS MISMATCH, BLOCK END IS SMALLER THAN BLOCK START\n");
-        }
-        insert_bbcount(count_per_basic_block_byte_size_, current_block.byte_size);
-        insert_bbcount(count_per_basic_block_instr_size_, current_block.instr_size);
-
-        basic_blocks_hit_count[current_block] += 1;
-        basic_block_size_history.push_back(current_block.byte_size);
-        addr_t cacheline_start_address =
-            cache_block_address_mask & current_block.starting_addr;
-        addr_t cacheline_end_address = cache_block_address_mask & current_block.end_addr;
-
-        //       if (cacheline_start_address != cacheline_end_address) {
-        //           std::cout << "WE NEED TO HANDLE THIS CASE: BASIC BLOCK OVERLAPS CACHE
-        //           BLOCK "
-        //                        "BOUNDARIES"
-        //                     << std::endl;
-        //           std::cout << "Spanning cache blocks: "
-        //                     << (cacheline_end_address - cacheline_start_address) / 64
-        //                     << std::endl;
-        //       }
-
-        auto basic_block_set = number_of_bytes_accessed[cacheline_start_address];
-        auto bb_entry = basic_block_set.find(current_block);
-        if (bb_entry == basic_block_set.end()) {
-            basic_block_set.insert(current_block);
-        } else {
-            bb_entry->hits += 1;
-        }
-
-        if (basic_block_size_history.size() == basic_block_size_history.capacity()) {
-            basic_block_size_history.reserve(basic_block_size_history.capacity() * 2);
-            size_t current_ram_consumption = getPhysicalRAMUsageValue() >> 10;
-            // how much memory do I consume?
-            std::cout << "CURRENT RAM: " << current_ram_consumption << " MB" << std::endl;
-        }
-        // current_block = { .starting_addr = 0, .end_addr = 0 };
-        current_block.byte_size = 0;
-        current_block.instr_size = 0;
-        current_block.starting_addr = 0;
-        current_block.end_addr = 0;
+        handle_branch(memref);
     }
 
     if (is_interrupt_) {
-        current_block.starting_addr = memref.data.addr;
-    }
-
-    if (!is_branch_ && !is_instr_) {
-        print_type(memref.data.type);
+        handle_interrupt(memref, hit);
     }
 }
 
@@ -286,6 +332,40 @@ trim_vector(std::vector<size_t> &vec)
 }
 
 void
+set_accessed(uint64_t &mask, uint8_t lower, uint8_t upper)
+{
+    int bitmask = 1;
+    for (int i = 0; i < lower; i++) {
+        bitmask = bitmask << 1;
+    }
+
+    for (int i = lower; i < upper; i++) {
+        mask |= bitmask;
+        bitmask = bitmask << 1;
+    }
+}
+
+uint8_t
+bytes_accessed(const addr_t &cacheline_base, std::vector<BasicBlock> &blocks_contained)
+{
+    uint64_t mask = 0;
+    for (auto it = blocks_contained.begin(); it != blocks_contained.end(); it++) {
+        addr_t start_block = it->starting_addr;
+        addr_t end_block = it->end_addr;
+        if (it->starting_addr < cacheline_base) {
+            start_block = cacheline_base;
+        }
+        if ((cacheline_base + 64) < it->end_addr) {
+            end_block = cacheline_base + 64;
+        }
+        start_block -= cacheline_base;
+        end_block -= cacheline_base;
+        set_accessed(mask, start_block, end_block);
+    }
+    return __builtin_popcount(mask);
+}
+
+void
 basic_block_stats_t::print_stats(std::string prefix)
 {
     trim_vector(count_per_basic_block_byte_size_);
@@ -295,7 +375,7 @@ basic_block_stats_t::print_stats(std::string prefix)
     std::cout << "Num instructions:" << basic_block_size_history.size() << std::endl;
 
     std::cout << prefix << "bb byte size:" << std::endl;
-    for (auto it = count_per_basic_block_byte_size_.begin();
+    for (auto it = count_per_basic_block_byte_size_.begin()++;
          it != count_per_basic_block_byte_size_.end(); it++) {
         std::cout << prefix << "    " << it - count_per_basic_block_byte_size_.begin()
                   << ": " << *it << std::endl;
@@ -308,6 +388,13 @@ basic_block_stats_t::print_stats(std::string prefix)
                   << ": " << *it << std::endl;
     }
 
+    for (auto it = number_of_bytes_accessed.begin(); it != number_of_bytes_accessed.end();
+         it++) {
+        const addr_t base_addr = (*it).first;
+        std::vector<BasicBlock> vec = (*it).second;
+        std::cout << base_addr << ": " << bytes_accessed(base_addr, vec) << std::endl;
+    }
+
     caching_device_stats_t::print_stats(prefix);
 }
 
@@ -316,20 +403,14 @@ basic_block_stats_t::reset()
 {
     caching_device_stats_t::reset();
     // TODO: Fixup missing variables
-    num_hits_at_reset_ = num_hits_;
-    num_misses_at_reset_ = num_misses_;
-    num_child_hits_at_reset_ = num_child_hits_;
-    num_hits_ = 0;
-    num_misses_ = 0;
-    num_compulsory_misses_ = 0;
-    num_child_hits_ = 0;
-    num_inclusive_invalidates_ = 0;
-    num_coherence_invalidates_ = 0;
     count_per_basic_block_byte_size_.clear();
     count_per_basic_block_instr_size_.clear();
     current_block = {
         .starting_addr = 0, .end_addr = 0, .instr_size = 0, .byte_size = 0
     };
+    basic_block_size_history.clear();
+    basic_blocks_hit_count.clear();
+    number_of_bytes_accessed.clear();
 }
 
 // void

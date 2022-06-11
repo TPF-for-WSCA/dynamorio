@@ -1,0 +1,40 @@
+// Configuration for a single-core CPU.
+ 
+// Common params.
+num_cores       1
+line_size       64
+cpu_scheduling  true
+sim_refs        3000 // 300000000
+warmup_fraction 0.1
+ 
+// Cache params.
+P0L1I {                        // P0 L1 instruction cache
+  type            instruction
+  core            0
+  size            32768        // 32K
+  assoc           8
+  parent          P0L2
+  replace_policy  LRU
+}
+P0L1D {                        // P0 L1 data cache
+  type            data
+  core            0
+  size            32768        // 32K
+  assoc           8
+  parent          P0L2
+  replace_policy  LRU
+}
+P0L2 {                         // P0 L2 unified cache
+  size            1M
+  assoc           16
+  inclusive       true
+  parent          LLC
+  replace_policy  LRU
+}
+LLC {                          // LLC
+  size            2M        // would want 1.375MB, as in XEON like skylake processors but cachesim only accepts powers of 2
+  assoc           16
+  inclusive       false
+  parent          memory
+  replace_policy  LRU
+}

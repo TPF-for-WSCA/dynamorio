@@ -315,10 +315,19 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         bool is_coherent_ = knobs_.model_coherence &&
             (non_coherent_caches_.find(cache_name) == non_coherent_caches_.end());
 
+        caching_device_stats_t *stats_collector;
+        if (cache_config.type.compare("instruction") == 0) {
+            stats_collector =
+                new basic_block_stats_t((int)knobs_.line_size, cache_config.miss_file,
+                                        knobs_.data_dir, warmup_enabled_, is_coherent_);
+        } else {
+            stats_collector =
+                new cache_stats_t((int)knobs_.line_size, cache_config.miss_file,
+                                  warmup_enabled_, is_coherent_);
+        }
+
         if (!cache->init((int)cache_config.assoc, (int)knobs_.line_size,
-                         (int)cache_config.size, parent_,
-                         new cache_stats_t((int)knobs_.line_size, cache_config.miss_file,
-                                           warmup_enabled_, is_coherent_),
+                         (int)cache_config.size, parent_, stats_collector,
                          cache_config.prefetcher == PREFETCH_POLICY_NEXTLINE
                              ? new prefetcher_t((int)knobs_.line_size)
                              : nullptr,
