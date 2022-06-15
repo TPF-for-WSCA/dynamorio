@@ -145,6 +145,11 @@ config_reader_t::configure(std::istream *config_file, cache_simulator_knobs_t &k
             } else {
                 knobs.model_coherence = false;
             }
+        } else if (param == "data_dir") {
+            if (!(*fin_ >> knobs.data_dir)) {
+                ERRMSG("Error reading data dir from the configuration file\n");
+                return false;
+            }
         } else {
             // A cache unit.
             cache_params_t cache;

@@ -1,0 +1,13 @@
+# ignore bin folder
+bin/*
+
+# generated files from running CTikzApp
+*.tex
+*.tikz
+*.pdf
+
+# keep files in example folder
+!example/*.tex
+!example/*.tikz
+!example/*.pdf
+

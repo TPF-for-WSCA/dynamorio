@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "caching_device_stats.h"
+#include "CTikz.hpp"
+#include "CException.hpp"
 
 struct BasicBlock {
     addr_t starting_addr;
@@ -70,6 +72,7 @@ protected:
     std::vector<size_t> count_per_basic_block_instr_size_;
     std::vector<size_t> count_per_basic_block_byte_size_;
     std::vector<size_t> basic_block_size_history;
+    std::unordered_map<BasicBlock, size_t> basic_block_cache_aligned_hit_count;
     std::unordered_map<BasicBlock, size_t> basic_blocks_hit_count;
     std::unordered_map<addr_t, std::vector<BasicBlock>> number_of_bytes_accessed;
 
@@ -86,7 +89,22 @@ private:
     void
     track_cacheline_access(const memref_t &memref);
 
+    uint64_t
+    bytes_accessed_by_block(const addr_t &cacheline_base, BasicBlock &block);
+
+    std::pair<uint8_t, std::vector<uint8_t>>
+    bytes_accessed(const addr_t &cacheline_base,
+                   std::vector<BasicBlock> &blocks_contained);
+
+    void
+    print_bytes_accessed();
+
+    void
+    create_histogram_of_cachelineaccesses(std::vector<uint64_t> &histogram,
+                                          std::vector<uint8_t> &accesses);
+
     size_t max_cacheline_bb = 0;
+    const std::string output_dir;
     size_t max_instr_size = 0;
     BasicBlock current_block;
     size_t max_memory_consumption = 0;

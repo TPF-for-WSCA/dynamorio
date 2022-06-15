@@ -4,8 +4,9 @@
 num_cores       1
 line_size       64
 cpu_scheduling  true
-sim_refs        3000 // 300000000
+sim_refs        30000000000
 warmup_fraction 0.1
+data_dir        /home/robrunne/Workspace/TracesDatasets/Google/charlie/trace-1/
  
 // Cache params.
 P0L1I {                        // P0 L1 instruction cache

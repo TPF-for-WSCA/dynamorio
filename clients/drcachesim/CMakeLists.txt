@@ -85,6 +85,9 @@ set(client_and_sim_srcs
   common/options.cpp
   common/trace_entry.cpp)
 
+  set(common/CTikz/CTikz.cpp
+    common/CTikz/CException.cpp)
+
 # i#2006: we split our tools into libraries for combining as desired in separate
 # launchers.  Since they are exported in the same dir as other tools like drcov,
 # we use a drmemtrace_ prefix.
@@ -167,6 +170,9 @@ set(drcachesim_srcs
   simulator/analyzer_interface.cpp
   tracer/instru.cpp
   tracer/instru_online.cpp
+  common/trace_entry.cpp
+  common/CTikz/CTikz.cpp
+  common/CTikz/CException.cpp
   # We include the invariants analyzer for sanity checks.
   tools/invariant_checker.cpp)
 add_executable(drcachesim ${drcachesim_srcs})
@@ -191,6 +197,7 @@ use_DynamoRIO_extension(drcachesim drutil_static)
 # This is to avoid ../ and common/ in the #includes of headers that we
 # export in a single dir for 3rd-party tool integration.
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/common)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/common/CTikz)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/reader)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tracer)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -198,6 +205,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 add_exported_library(drmemtrace_analyzer STATIC
   analyzer.cpp
   common/trace_entry.cpp
+  common/CTikz/CTikz.cpp
+  common/CTikz/CException.cpp
   reader/reader.cpp
   reader/config_reader.cpp
   reader/file_reader.cpp
@@ -212,6 +221,8 @@ link_with_pthread(drmemtrace_analyzer)
 # We get away w/ exporting the generically-named "utils.h" by putting into a
 # drmemtrace/ subdir.
 install_client_nonDR_header(drmemtrace common/utils.h)
+install_client_nonDR_header(drmemtrace common/CTikz/CTikz.hpp)
+install_client_nonDR_header(drmemtrace common/CTikz/CException.hpp)
 install_client_nonDR_header(drmemtrace common/trace_entry.h)
 install_client_nonDR_header(drmemtrace common/memref.h)
 install_client_nonDR_header(drmemtrace reader/reader.h)

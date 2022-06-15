@@ -159,13 +159,22 @@ droption_t<std::string> op_LL_miss_file(
     "analysis be written to the specified file. Each hint is written in text format as a "
     "<program counter, stride, locality level> tuple.");
 
+droption_t<std::string>
+    op_data_dir(DROPTION_SCOPE_FRONTEND, "data_dir", "",
+                "If non empty, output files will be written to the data directory",
+                "Certain analyzers write output files, such as graphs and similar, "
+                "which either will be written to data_dir or to the current working "
+                "directory, if the data dir flag is not specified.");
+
 droption_t<bool> op_L0_filter(
     DROPTION_SCOPE_CLIENT, "L0_filter", false,
     "Filter out first-level cache hits during tracing",
     "Filters out instruction and data hits in a 'zero-level' cache during tracing "
     "itself, shrinking the final trace to only contain instruction and data accesses "
-    "that miss in this initial cache.  This cache is direct-mapped with sizes equal to "
-    "-L0I_size and -L0D_size.  It uses virtual addresses regardless of -use_physical. "
+    "that miss in this initial cache.  This cache is direct-mapped with sizes equal "
+    "to "
+    "-L0I_size and -L0D_size.  It uses virtual addresses regardless of "
+    "-use_physical. "
     "The dynamic (pre-filtered) per-thread instruction count is tracked and supplied "
     "via a #TRACE_MARKER_TYPE_INSTRUCTION_COUNT marker at thread buffer boundaries "
     "and at thread exit.");

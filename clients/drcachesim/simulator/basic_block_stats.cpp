@@ -1,13 +1,31 @@
+/**
+ * @file basic_block_stats.cpp
+ * @author Roman Kaspar Brunner (roman.k.brunner@ntnu.no)
+ * @brief Basic block analyzer for instruction specific cache.
+ * @version 0.1
+ * @date 2022-06-13
+ *
+ * @copyright Copyright (c) 2022
+ *
+ */
+
 #include <iostream>
 #include <iomanip>
 #include <cassert>
 #include <algorithm>
+#include <numeric>
 
 #include "basic_block_stats.h"
 // DEBUGGING IMPORTS: HOW MUCH MEMORY DO WE USE
 #include "stdlib.h"
 #include "string.h"
 
+/**
+ * @brief Parses status line
+ *
+ * @param line The textual output of status file to be parsed
+ * @return int The amount of resources used
+ */
 int
 parseLine(char *line)
 {
@@ -20,6 +38,11 @@ parseLine(char *line)
     return i;
 }
 
+/**
+ * @brief Get the Physical RAM Usage Value
+ *
+ * @return int The amount of physical RAM used in KB
+ */
 int
 getPhysicalRAMUsageValue()
 {
@@ -37,6 +60,10 @@ getPhysicalRAMUsageValue()
     return result;
 }
 
+/**
+ * @brief assert with a message
+ *
+ */
 #define assertm(exp, msg) assert(((void)msg, exp))
 
 bool
@@ -46,18 +73,25 @@ operator==(const BasicBlock &lhs, const BasicBlock &rhs)
         (lhs.starting_addr <= rhs.starting_addr && rhs.end_addr <= lhs.end_addr);
 }
 
+/**
+ * @brief Adjust the count in the vector, where the index denotes how large the
+ * basic block is
+ *
+ * @param vec Vector contains the counts for the different sizes of basic blocks
+ * @param size The size of the basic block which we want to count
+ */
 void
-insert_bbcount(std::vector<size_t> &vec, size_t count)
+insert_bbcount(std::vector<size_t> &vec, size_t size)
 {
     try {
-        if (vec.size() <= count) {
-            vec.resize(2 * count, 0);
+        if (vec.size() <= size) {
+            vec.resize(2 * size, 0);
         }
-        vec[count] += 1;
+        vec[size] += 1;
     } catch (std::length_error &e) {
         printf("FAILED TO ADD DATA TO VECTOR.\n");
         printf("Current vector size: %lu\n", vec.size());
-        printf("count              : %lu\n", count);
+        printf("size              : %lu\n", size);
         std::cout << e.what() << std::endl;
     }
 }
@@ -70,6 +104,7 @@ basic_block_stats_t::basic_block_stats_t(int block_size, const std::string &miss
     , count_per_basic_block_byte_size_(block_size)
     , basic_block_size_history(0)
     , basic_blocks_hit_count(0)
+    , output_dir(output_dir)
     , current_block({ 0, 0, 0, 0 })
 {
     basic_block_size_history.reserve(10000);
@@ -120,6 +155,9 @@ basic_block_stats_t::track_cacheline_access(const memref_t &memref)
         cache_block_address_mask & current_block.starting_addr;
     addr_t cacheline_end_address = cache_block_address_mask &
         (current_block.starting_addr + current_block.byte_size);
+    cacheline_end_address = (cacheline_end_address == cacheline_start_address)
+        ? cacheline_end_address + 64
+        : cacheline_end_address;
 
     if (cacheline_end_address - cacheline_start_address > max_cacheline_bb) {
         max_cacheline_bb = cacheline_end_address - cacheline_start_address;
@@ -127,15 +165,16 @@ basic_block_stats_t::track_cacheline_access(const memref_t &memref)
                   << " lines" << std::endl;
     }
 
-    for (; cacheline_start_address <= cacheline_end_address;
+    for (; cacheline_start_address < cacheline_end_address;
          cacheline_start_address += 64) {
         auto basic_block_vec = number_of_bytes_accessed[cacheline_start_address];
-        if (current_block.miss) {
+        // if it spans more than one line it might be that the vec is still empty
+        if (current_block.miss || basic_block_vec.size() == 0) {
             basic_block_vec.push_back(current_block);
         } else {
             auto is_same_block = [this](const BasicBlock &bb) {
-                return (bb.starting_addr == current_block.starting_addr) &&
-                    (bb.end_addr == current_block.end_addr);
+                return (bb.starting_addr <= current_block.starting_addr) &&
+                    (bb.end_addr >= current_block.end_addr);
             };
             auto bb_entry = std::find_if(basic_block_vec.rbegin(), basic_block_vec.rend(),
                                          is_same_block);
@@ -331,10 +370,10 @@ trim_vector(std::vector<size_t> &vec)
     vec.resize(i + 1);
 }
 
-void
-set_accessed(uint64_t &mask, uint8_t lower, uint8_t upper)
+uint64_t
+set_accessed(uint64_t mask, uint8_t lower, uint8_t upper)
 {
-    int bitmask = 1;
+    uint64_t bitmask = 1;
     for (int i = 0; i < lower; i++) {
         bitmask = bitmask << 1;
     }
@@ -343,26 +382,119 @@ set_accessed(uint64_t &mask, uint8_t lower, uint8_t upper)
         mask |= bitmask;
         bitmask = bitmask << 1;
     }
+    return mask;
 }
 
-uint8_t
-bytes_accessed(const addr_t &cacheline_base, std::vector<BasicBlock> &blocks_contained)
+uint64_t
+basic_block_stats_t::bytes_accessed_by_block(const addr_t &cacheline_base,
+                                             BasicBlock &block)
+{
+    addr_t start_block = block.starting_addr;
+    addr_t end_block = start_block + block.byte_size;
+    if (block.starting_addr < cacheline_base) {
+        start_block = cacheline_base;
+    }
+    if ((cacheline_base + 64) < block.end_addr) {
+        end_block = cacheline_base + 64;
+    }
+    start_block -= cacheline_base;
+    end_block -= cacheline_base;
+
+    auto result = set_accessed(0, start_block, end_block);
+    return result;
+}
+// TODO: Fix off by one
+std::pair<uint8_t, std::vector<uint8_t>>
+basic_block_stats_t::bytes_accessed(const addr_t &cacheline_base,
+                                    std::vector<BasicBlock> &blocks_contained)
 {
     uint64_t mask = 0;
+    std::vector<uint8_t> accesses;
+    accesses.reserve(blocks_contained.size());
     for (auto it = blocks_contained.begin(); it != blocks_contained.end(); it++) {
-        addr_t start_block = it->starting_addr;
-        addr_t end_block = it->end_addr;
-        if (it->starting_addr < cacheline_base) {
-            start_block = cacheline_base;
-        }
-        if ((cacheline_base + 64) < it->end_addr) {
-            end_block = cacheline_base + 64;
-        }
-        start_block -= cacheline_base;
-        end_block -= cacheline_base;
-        set_accessed(mask, start_block, end_block);
+        auto tmp_mask = bytes_accessed_by_block(cacheline_base, *it);
+        auto tmp_count = (uint8_t)__builtin_popcountll(tmp_mask);
+        accesses.push_back(tmp_count);
+        mask |= tmp_mask;
     }
-    return __builtin_popcount(mask);
+
+    return std::pair<uint8_t, std::vector<uint8_t>> { (uint8_t)__builtin_popcountll(mask),
+                                                      accesses };
+}
+
+void
+basic_block_stats_t::print_bytes_accessed()
+{
+    std::vector<uint64_t> histogram(65, 0);
+    std::vector<double> overall_accessed_histgram(65, 0);
+    uint64_t total_allocations = 0;
+
+    for (auto it = number_of_bytes_accessed.begin(); it != number_of_bytes_accessed.end();
+         it++) {
+        std::vector<BasicBlock> vec = (*it).second;
+        total_allocations += vec.size();
+        const addr_t base_addr = (*it).first;
+        auto accessed = bytes_accessed(base_addr, vec);
+        create_histogram_of_cachelineaccesses(histogram, accessed.second);
+        int total_accessed = (int)accessed.first;
+        overall_accessed_histgram[total_accessed]++;
+        std::cout << base_addr << ": " << total_accessed << std::endl;
+    }
+
+    std::vector<double> relative_histogram;
+    relative_histogram.reserve(65);
+
+    for (auto const &bucket : histogram) {
+        relative_histogram.push_back((long double)bucket /
+                                     (long double)total_allocations);
+    }
+    try {
+
+        CTikz tikz_canvas;
+        CTikz tikz_global_bb;
+        std::vector<double> idx(65);
+        std::iota(std::begin(idx), std::end(idx), 0);
+        tikz_canvas.addData_vd(idx, relative_histogram, "Bytes Accessed/Cacheline",
+                               "blue");
+        tikz_global_bb.addData_vd(idx, overall_accessed_histgram, "#Bytes/Line (overall)",
+                                  "red");
+        std::string file = output_dir + "numberofbytespercacheline.tikz";
+        std::string global_file = output_dir + "numberofbytespercacheline_global.tikz";
+        // tikz_canvas.createTikzPdfHist_vd(file, 64, 1, 64);
+        // file += "norm.tikz";
+        tikz_canvas.setXlabel_vd("\\#Useful bytes in Cacheline");
+        tikz_canvas.setYlabel_vd("Relative frequency");
+        tikz_canvas.setLegendStyle_vd("draw=none");
+        tikz_canvas.addAdditionalSettings_vd("legend pos={outer north east}");
+        tikz_canvas.createTikzPdf_vd(file);
+        tikz_global_bb.createTikzPdf_vd(global_file);
+    } catch (const CException &e) {
+        std::cerr << e.what() << '\n';
+        exit(-1);
+    }
+
+    std::cout << "Number of total cachelines: " << number_of_bytes_accessed.size()
+              << std::endl;
+    std::cout << "Number of useful bytes : Number of cachelines" << std::endl;
+    for (size_t i = 0; i < histogram.size(); i++) {
+        std::cout << i << ": " << histogram[i] << std::endl;
+    }
+}
+
+/**
+ * @brief Count how many occurances of the same number of byte accesses happened
+ *
+ * @param histogram The histogram vector containing the aggregated count
+ * @param accesses A vector containing the history of cachelines accessed bit counts,
+ * measured over one presence in L1-I
+ */
+void
+basic_block_stats_t::create_histogram_of_cachelineaccesses(
+    std::vector<uint64_t> &histogram, std::vector<uint8_t> &accesses)
+{
+    for (auto it = accesses.begin(); it != accesses.end(); it++) {
+        histogram[*it] += 1;
+    }
 }
 
 void
@@ -388,13 +520,15 @@ basic_block_stats_t::print_stats(std::string prefix)
                   << ": " << *it << std::endl;
     }
 
-    for (auto it = number_of_bytes_accessed.begin(); it != number_of_bytes_accessed.end();
-         it++) {
-        const addr_t base_addr = (*it).first;
-        std::vector<BasicBlock> vec = (*it).second;
-        std::cout << base_addr << ": " << bytes_accessed(base_addr, vec) << std::endl;
-    }
-
+    print_bytes_accessed();
+    /*
+        for (auto it = number_of_bytes_accessed.begin(); it !=
+       number_of_bytes_accessed.end(); it++) { const addr_t base_addr = (*it).first;
+            std::vector<BasicBlock> vec = (*it).second;
+            std::cout << base_addr << ": " << bytes_accessed(base_addr, vec) <<
+       std::endl;
+        }
+    */
     caching_device_stats_t::print_stats(prefix);
 }
 
