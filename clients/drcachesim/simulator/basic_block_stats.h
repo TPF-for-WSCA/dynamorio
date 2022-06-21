@@ -20,6 +20,7 @@ struct BasicBlock {
     size_t byte_size;
     mutable size_t hits = 1;
     mutable bool miss = true;
+    std::vector<size_t> access_sizes;
 };
 
 void
@@ -94,7 +95,9 @@ private:
 
     std::pair<uint8_t, std::vector<uint8_t>>
     bytes_accessed(const addr_t &cacheline_base,
-                   std::vector<BasicBlock> &blocks_contained);
+                   std::vector<BasicBlock> &blocks_contained,
+                   std::vector<std::vector<uint64_t>>
+                       count_of_access_sizes_per_bytes_accessed_per_cacheline);
 
     void
     print_bytes_accessed();

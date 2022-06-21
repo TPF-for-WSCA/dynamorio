@@ -180,8 +180,10 @@ basic_block_stats_t::track_cacheline_access(const memref_t &memref)
                                          is_same_block);
 
             if (bb_entry == basic_block_vec.rend()) {
+                current_block.access_sizes[current_block.byte_size]++;
                 basic_block_vec.push_back(current_block);
             } else {
+                bb_entry->access_sizes[current_block.byte_size]++;
                 bb_entry->hits += 1;
             }
         }
@@ -219,6 +221,7 @@ basic_block_stats_t::handle_branch(const memref_t &memref)
     current_block.instr_size = 0;
     current_block.starting_addr = 0;
     current_block.end_addr = 0;
+    current_block.access_sizes = std::vector<size_t>(65, 0);
 }
 
 void
@@ -403,10 +406,12 @@ basic_block_stats_t::bytes_accessed_by_block(const addr_t &cacheline_base,
     auto result = set_accessed(0, start_block, end_block);
     return result;
 }
-// TODO: Fix off by one
+
 std::pair<uint8_t, std::vector<uint8_t>>
-basic_block_stats_t::bytes_accessed(const addr_t &cacheline_base,
-                                    std::vector<BasicBlock> &blocks_contained)
+basic_block_stats_t::bytes_accessed(
+    const addr_t &cacheline_base, std::vector<BasicBlock> &blocks_contained,
+    std::vector<std::vector<uint64_t>>
+        count_of_access_sizes_per_bytes_accessed_per_cacheline)
 {
     uint64_t mask = 0;
     std::vector<uint8_t> accesses;
@@ -414,6 +419,10 @@ basic_block_stats_t::bytes_accessed(const addr_t &cacheline_base,
     for (auto it = blocks_contained.begin(); it != blocks_contained.end(); it++) {
         auto tmp_mask = bytes_accessed_by_block(cacheline_base, *it);
         auto tmp_count = (uint8_t)__builtin_popcountll(tmp_mask);
+        for (auto const &accessed_bytes : it->access_sizes) {
+            count_of_access_sizes_per_bytes_accessed_per_cacheline[accessed_bytes]
+                                                                  [tmp_count] += 1;
+        }
         accesses.push_back(tmp_count);
         mask |= tmp_mask;
     }
@@ -427,6 +436,9 @@ basic_block_stats_t::print_bytes_accessed()
 {
     std::vector<uint64_t> histogram(65, 0);
     std::vector<double> overall_accessed_histgram(65, 0);
+    std::vector<std::vector<uint64_t>>
+        count_of_access_sizes_per_bytes_accessed_per_cacheline(
+            65, std::vector<uint64_t>(65, 0));
     uint64_t total_allocations = 0;
 
     for (auto it = number_of_bytes_accessed.begin(); it != number_of_bytes_accessed.end();
@@ -434,7 +446,8 @@ basic_block_stats_t::print_bytes_accessed()
         std::vector<BasicBlock> vec = (*it).second;
         total_allocations += vec.size();
         const addr_t base_addr = (*it).first;
-        auto accessed = bytes_accessed(base_addr, vec);
+        auto accessed = bytes_accessed(
+            base_addr, vec, count_of_access_sizes_per_bytes_accessed_per_cacheline);
         create_histogram_of_cachelineaccesses(histogram, accessed.second);
         int total_accessed = (int)accessed.first;
         overall_accessed_histgram[total_accessed]++;
@@ -448,10 +461,28 @@ basic_block_stats_t::print_bytes_accessed()
         relative_histogram.push_back((long double)bucket /
                                      (long double)total_allocations);
     }
+
+    std::vector<std::vector<double>>
+        relative_accessed_bytes_per_total_accesses_per_cacheline(
+            65, std::vector<double>(65, 0.0));
+
+    for (int i = 0; i < 66; i++) {
+        auto sub_accesses = relative_accessed_bytes_per_total_accesses_per_cacheline[i];
+        for (int j = 0; j < 66; j++) {
+            auto total_accesses_of_size_j = histogram[j];
+            relative_accessed_bytes_per_total_accesses_per_cacheline[i][j] =
+                ((long double)sub_accesses[j] / (long double)total_accesses_of_size_j);
+        }
+    }
+
+    std::cout << relative_accessed_bytes_per_total_accesses_per_cacheline[5][32]
+              << std::endl;
+
     try {
 
         CTikz tikz_canvas;
         CTikz tikz_global_bb;
+        CTikz stacked_accesses;
         std::vector<double> idx(65);
         std::iota(std::begin(idx), std::end(idx), 0);
         tikz_canvas.addData_vd(idx, relative_histogram, "Bytes Accessed/Cacheline",
@@ -539,9 +570,11 @@ basic_block_stats_t::reset()
     // TODO: Fixup missing variables
     count_per_basic_block_byte_size_.clear();
     count_per_basic_block_instr_size_.clear();
-    current_block = {
-        .starting_addr = 0, .end_addr = 0, .instr_size = 0, .byte_size = 0
-    };
+    current_block = { .starting_addr = 0,
+                      .end_addr = 0,
+                      .instr_size = 0,
+                      .byte_size = 0,
+                      .access_sizes = std::vector<size_t>(65, 0) };
     basic_block_size_history.clear();
     basic_blocks_hit_count.clear();
     number_of_bytes_accessed.clear();
