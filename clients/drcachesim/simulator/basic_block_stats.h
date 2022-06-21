@@ -87,6 +87,12 @@ private:
     handle_interrupt(const memref_t &memref, bool hit);
 
     void
+    record_basic_block(BasicBlock b);
+
+    void
+    print_last_n_basic_blocks(int n);
+
+    void
     track_cacheline_access(const memref_t &memref);
 
     uint64_t
@@ -109,6 +115,7 @@ private:
     BasicBlock current_block;
     size_t max_memory_consumption = 0;
     static const size_t cache_block_address_mask = 0xFFFFFFFFFFFFFFC0;
+    std::vector<BasicBlock> basic_block_buffer;
 };
 
 #endif
