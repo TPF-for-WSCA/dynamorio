@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <set>
 #include <vector>
+#include <deque>
 
 #include "caching_device_stats.h"
 #include "CTikz.hpp"
@@ -88,10 +89,10 @@ private:
     handle_interrupt(const memref_t &memref, bool hit);
 
     void
-    record_basic_block(BasicBlock b);
+    record_memref(memref_t m);
 
     void
-    print_last_n_basic_blocks(int n);
+    print_last_n_memrefs(int n);
 
     void
     track_cacheline_access(const memref_t &memref);
@@ -118,7 +119,7 @@ private:
     BasicBlock current_block;
     size_t max_memory_consumption = 0;
     static const size_t cache_block_address_mask = 0xFFFFFFFFFFFFFFC0;
-    std::vector<BasicBlock> basic_block_buffer;
+    std::deque<memref_t> basic_block_buffer;
 };
 
 #endif
