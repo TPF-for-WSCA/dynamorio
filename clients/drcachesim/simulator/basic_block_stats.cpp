@@ -106,9 +106,40 @@ basic_block_stats_t::basic_block_stats_t(int block_size, const std::string &miss
     , basic_blocks_hit_count(0)
     , output_dir(output_dir)
     , current_block({ 0, 0, 0, 0 })
+    , basic_block_buffer()
 {
     basic_block_size_history.reserve(10000);
     basic_blocks_hit_count.reserve(10000);
+    basic_block_buffer.reserve(10);
+}
+
+void
+basic_block_stats_t::record_basic_block(BasicBlock b)
+{
+    if (basic_block_buffer.size() == basic_block_buffer.capacity()) {
+        basic_block_buffer.pop_front();
+    }
+
+    basic_block_buffer.push_back(b);
+}
+
+void
+basic_block_stats_t::print_last_n_basic_blocks(int n)
+{
+    if (n >= basic_block_buffer.size()) {
+        n = basic_block_buffer.size() - 1;
+    }
+
+    for (int i = 0; i < n; ++i) {
+        auto curr = basic_block_buffer[i];
+        std::cout << "Block -" << (i + 1) << std::endl;
+        std::cout << "start addr: " << curr.starting_addr << std::endl;
+        std::cout << "end addr: " << curr.end_addr << std::endl;
+        std::cout << "instrs: " << curr.instr_size << std::endl;
+        std::cout << "byte size: " << curr.byte_size << std::endl;
+        std::cout << "hits: " << curr.hits << std::endl;
+        std::cout << "miss: " << (miss ? "yes" : "no") << std::endl;
+    }
 }
 
 bool
@@ -273,13 +304,18 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         is_interrupt_ = handle_instr(memref, hit);
         is_branch_ = is_branch_ || is_interrupt_;
     }
+    record_basic_block(current_block);
 
     // calculate number of bytes in instruction based on addresses.
     if (is_branch_) {
+        if (current_block.byte_size == 1)
+            print_last_n_basic_blocks(3);
         handle_branch(memref);
     }
 
     if (is_interrupt_) {
+        if (current_block.byte_size == 1)
+            print_last_n_basic_blocks(3);
         handle_interrupt(memref, hit);
     }
 }
