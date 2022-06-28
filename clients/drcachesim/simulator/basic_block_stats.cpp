@@ -125,11 +125,13 @@ basic_block_stats_t::record_memref(memref_t mem)
 void
 basic_block_stats_t::print_last_n_memrefs(int n)
 {
-    if (n >= (int)basic_block_buffer.size()) {
-        n = basic_block_buffer.size() - 1;
+    int start = basic_block_buffer.size() - 1;
+    n = start - n;
+    if (n < 0) {
+        n = 0;
     }
 
-    for (int i = 0; i < n; ++i) {
+    for (int i = start; i >= n; --i) {
         auto curr = basic_block_buffer[i];
         std::cout << "memref -" << (i + 1) << std::endl;
         std::cout << "start addr: " << curr.instr.addr << std::endl;
@@ -196,6 +198,8 @@ basic_block_stats_t::track_cacheline_access(const memref_t &memref)
          cacheline_start_address += 64) {
         auto basic_block_vec = number_of_bytes_accessed[cacheline_start_address];
         // if it spans more than one line it might be that the vec is still empty
+        // if it spans more than one line it might be that the miss handling per basic
+        // block is overly pessimistic
         if (current_block.miss || basic_block_vec.size() == 0) {
             basic_block_vec.push_back(current_block);
         } else {
@@ -300,12 +304,12 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         is_interrupt_ = handle_instr(memref, hit);
         is_branch_ = is_branch_ || is_interrupt_;
     }
-    record_memref(memref);
+    // record_memref(memref);
 
     // calculate number of bytes in instruction based on addresses.
     if (is_branch_) {
-        if (current_block.byte_size == 1)
-            print_last_n_memrefs(9);
+        //        if (current_block.byte_size == 1)
+        //            print_last_n_memrefs(1);
         handle_branch(memref);
     }
 

@@ -4,7 +4,7 @@
 num_cores       1
 line_size       64
 cpu_scheduling  true
-sim_refs        30000000000
+sim_refs        30000
 warmup_fraction 0.1
 data_dir        /home/robrunne/Workspace/TracesDatasets/Google/charlie/trace-1/
  
