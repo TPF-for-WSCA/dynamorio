@@ -21,7 +21,6 @@ struct BasicBlock {
     size_t byte_size;
     mutable size_t hits = 1;
     mutable bool miss = true;
-    std::vector<size_t> access_sizes;
 };
 
 void
@@ -71,10 +70,13 @@ public:
     reset() override;
 
 protected:
+    // NOTE: Cacheline presence means for every time this address range has been loaded
+    // into the cache we start a new counter
+    std::unordered_map<addr_t, std::vector<std::vector<uint64_t>>>
+        bytes_accessed_per_presence_per_cacheline;
     std::vector<size_t> count_per_basic_block_instr_size_;
     std::vector<size_t> count_per_basic_block_byte_size_;
     std::vector<size_t> basic_block_size_history;
-    std::unordered_map<BasicBlock, size_t> basic_block_cache_aligned_hit_count;
     std::unordered_map<BasicBlock, size_t> basic_blocks_hit_count;
     std::unordered_map<addr_t, std::vector<BasicBlock>> number_of_bytes_accessed;
 
@@ -87,6 +89,12 @@ private:
     handle_branch(const memref_t &memref);
     void
     handle_interrupt(const memref_t &memref, bool hit);
+
+    void
+    reset_current_cacheline_block();
+
+    void
+    reset_current_cacheline_block(const memref_t &memref, bool hit);
 
     void
     record_memref(memref_t m);
@@ -102,9 +110,7 @@ private:
 
     std::pair<uint8_t, std::vector<uint8_t>>
     bytes_accessed(const addr_t &cacheline_base,
-                   std::vector<BasicBlock> &blocks_contained,
-                   std::vector<std::vector<uint64_t>>
-                       count_of_access_sizes_per_bytes_accessed_per_cacheline);
+                   std::vector<BasicBlock> &blocks_contained);
 
     void
     print_bytes_accessed();
@@ -114,11 +120,12 @@ private:
                                           std::vector<uint8_t> &accesses);
 
     size_t max_cacheline_bb = 0;
+    size_t handled_instructions = 0;
     const std::string output_dir;
     size_t max_instr_size = 0;
     BasicBlock current_block;
-    size_t max_memory_consumption = 0;
-    static const size_t cache_block_address_mask = 0xFFFFFFFFFFFFFFC0;
+    BasicBlock current_block_cacheline_constrained;
+    static const size_t cache_line_address_mask = 0xFFFFFFFFFFFFFFC0;
     std::deque<memref_t> basic_block_buffer;
 };
 
