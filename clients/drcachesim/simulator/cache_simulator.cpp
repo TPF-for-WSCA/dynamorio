@@ -149,11 +149,8 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
                 knobs_.L1D_assoc, (int)knobs_.line_size, (int)knobs_.L1D_size, llc,
                 new cache_stats_t((int)knobs_.line_size, "", warmup_enabled_,
                                   knobs_.model_coherence),
-                knobs_.data_prefetcher == PREFETCH_POLICY_NEXTLINE
-                    ? new prefetcher_t((int)knobs_.line_size)
-                    : nullptr,
-                false /*inclusive*/, knobs_.model_coherence, (2 * i) + 1,
-                snoop_filter_)) {
+                nullptr /*prefetcher*/, false /*inclusive*/, knobs_.model_coherence,
+                (2 * i) + 1, snoop_filter_)) {
             error_string_ = "Usage error: failed to initialize L1 caches.  Ensure sizes "
                             "and associativity are powers of 2 "
                             "and that the total sizes are multiples of the line size.";
@@ -328,11 +325,9 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
 
         if (!cache->init((int)cache_config.assoc, (int)knobs_.line_size,
                          (int)cache_config.size, parent_, stats_collector,
-                         cache_config.prefetcher == PREFETCH_POLICY_NEXTLINE
-                             ? new prefetcher_t((int)knobs_.line_size)
-                             : nullptr,
-                         cache_config.inclusive, is_coherent_, is_snooped ? snoop_id : -1,
-                         is_snooped ? snoop_filter_ : nullptr, children)) {
+                         nullptr /*prefetcher*/, cache_config.inclusive, is_coherent_,
+                         is_snooped ? snoop_id : -1, is_snooped ? snoop_filter_ : nullptr,
+                         children)) {
             error_string_ = "Usage error: failed to initialize the cache " + cache_name;
             success_ = false;
             return;

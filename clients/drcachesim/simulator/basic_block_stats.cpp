@@ -21,6 +21,8 @@
 #include "stdlib.h"
 #include "string.h"
 
+#define ANALYSED_INSTRUCTIONS_PER_ITERATION 120000000
+
 /**
  * @brief Parses status line
  *
@@ -200,8 +202,11 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
         current_block_cacheline_constrained.starting_addr & cache_line_address_mask;
     auto curr_cacheline_base_address = memref.instr.addr & cache_line_address_mask;
 
-    bool is_adjacent_instr =
-        (memref.data.addr - (current_block.starting_addr + current_block.byte_size)) == 0;
+    // TODO: COUNT INTERRUPTS
+    auto interrupt_diff = memref.data.addr -
+        (current_block_cacheline_constrained.starting_addr +
+         current_block_cacheline_constrained.byte_size);
+    bool is_adjacent_instr = interrupt_diff == 0;
 
     // We do not orient ourselves at branches but only at cacheline base_addresses and
     // corresponding jumps
@@ -233,6 +238,14 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
         }
 
         reset_current_cacheline_block(memref, hit);
+    } else if (!hit && current_block_cacheline_constrained.miss == hit) {
+        std::cout << "WARN: CACHE CHANGED ITS MIND WITHIN A SINGLE CACHELINE"
+                  << std::endl;
+        std::cout << "block size: " << current_block.byte_size << "B / "
+                  << current_block.instr_size << "i" << std::endl;
+        std::cout << "line size: " << current_block_cacheline_constrained.byte_size
+                  << "B / " << current_block_cacheline_constrained.instr_size << "i"
+                  << std::endl;
     }
 
     if (is_adjacent_instr) {
@@ -244,9 +257,13 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
         current_block_cacheline_constrained.byte_size += memref.data.size;
         current_block.end_addr = memref.data.addr;
         current_block_cacheline_constrained.end_addr = memref.data.addr;
+        if (current_block_cacheline_constrained.byte_size > 64) {
+            std::cout << "WTF is going on" << std::endl;
+        }
     } else {
-        // We moved more than the size of any allowed x86 instruction - we must have been
+        // We moved more than the size of the previous x86 instruction - we must have been
         // interrupted
+        num_interrupts++;
         is_interrupt_ = true;
     }
     if ((MAX_X86_INSTR_SIZE <
@@ -412,10 +429,16 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
             print_last_n_memrefs(9);
         handle_interrupt(memref, hit);
     }
-    if (handled_instructions % 10000000 == 0) {
+    if (handled_instructions % ANALYSED_INSTRUCTIONS_PER_ITERATION == 0) {
         std::ostringstream oss;
         oss << "Stats after " << handled_instructions << " instructions:" << std::endl;
         print_stats(oss.str());
+        oss.str("");
+        oss.clear();
+        // short hack to keep instr count
+        auto prev = handled_instructions;
+        reset();
+        handled_instructions = prev;
     }
 }
 
@@ -516,22 +539,51 @@ basic_block_stats_t::bytes_accessed_by_block(const addr_t &cacheline_base,
     return result;
 }
 
-std::pair<uint8_t, std::vector<uint8_t>>
+std::pair<uint8_t, std::vector<hitbytes>>
 basic_block_stats_t::bytes_accessed(const addr_t &cacheline_base,
                                     std::vector<BasicBlock> &blocks_contained)
 {
     uint64_t mask = 0;
-    std::vector<uint8_t> accesses;
+    std::vector<hitbytes> accesses;
     accesses.reserve(blocks_contained.size());
     for (auto it = blocks_contained.begin(); it != blocks_contained.end(); it++) {
         auto tmp_mask = bytes_accessed_by_block(cacheline_base, *it);
         auto tmp_count = (uint8_t)__builtin_popcountll(tmp_mask);
-        accesses.push_back(tmp_count);
+        accesses.push_back(hitbytes(it->hits, tmp_count));
         mask |= tmp_mask;
     }
 
-    return std::pair<uint8_t, std::vector<uint8_t>> { (uint8_t)__builtin_popcountll(mask),
-                                                      accesses };
+    return std::pair<uint8_t, std::vector<hitbytes>> {
+        (uint8_t)__builtin_popcountll(mask), accesses
+    };
+}
+
+std::vector<size_t>
+get_moving_average_block_size(std::vector<size_t> &history, int window_size)
+{
+    std::vector<size_t> result;
+    result.reserve(history.size());
+    for (int i = 0; i < history.size(); i += 1) {
+        auto it = history.begin() + i;
+        size_t sum = std::accumulate(it, it + window_size, 0);
+        result.push_back(sum / window_size);
+    }
+    return result;
+}
+
+std::vector<size_t>
+get_local_average_block_size(std::vector<size_t> &history, int window_size)
+{
+    std::vector<size_t> result;
+    result.reserve(history.size() / window_size + 1);
+    for (int i = 0; i < history.size(); i += window_size) {
+        if (history.size() < window_size + i - 2)
+            break;
+        auto it = history.begin() + i;
+        size_t sum = std::accumulate(it, it + window_size, 0);
+        result.push_back(sum / window_size);
+    }
+    return result;
 }
 
 void
@@ -547,10 +599,12 @@ basic_block_stats_t::print_bytes_accessed()
         total_allocations += vec.size();
         const addr_t base_addr = (*it).first;
         auto accessed = bytes_accessed(base_addr, vec);
-        create_histogram_of_cachelineaccesses(histogram, accessed.second);
+        total_allocations +=
+            create_histogram_of_cachelineaccesses(histogram, accessed.second);
         int total_accessed = (int)accessed.first;
         overall_accessed_histgram[total_accessed]++;
-        std::cout << base_addr << ": " << total_accessed << std::endl;
+        // TODO: Integrate this into counter
+        // std::cout << base_addr << ": " << total_accessed << std::endl;
     }
 
     std::vector<double> relative_histogram;
@@ -565,7 +619,7 @@ basic_block_stats_t::print_bytes_accessed()
         count_accesses_of_accessed_bytes_per_total_accessed_bytes_of_cacheline(
             65, std::vector<size_t>(65, 0));
 
-    std::vector<size_t> count_accessed_bytes_per_cacheline(65);
+    std::vector<double> count_accessed_bytes_per_cacheline(65, 0.0);
     // TODO: Replace by parallel foreach loops
     for (auto const &[cacheline_baseaddress, accesses_per_presence] :
          bytes_accessed_per_presence_per_cacheline) {
@@ -625,37 +679,91 @@ basic_block_stats_t::print_bytes_accessed()
     // std::cout << relative_accessed_bytes_per_total_accesses_per_cacheline[5][32]
     //           << std::endl;
 
-    try {
+    /*
+        for (int i = 100; i < 10001;) {
+            // auto moving_average_block_size =
+            //     get_moving_average_block_size(basic_block_size_history, i);
+            auto local_average_block_size =
+                get_local_average_block_size(basic_block_size_history, i);
+            std::cout << "#################### WINDOW SIZE " << i << "
+       ####################"
+                      << std::endl;
+            std::cout << "#################### MOVING AVERAGE ####################"
+                      << std::endl;
+            // for (int j = 0; j < moving_average_block_size.size(); ++j) {
+            //     std::cout << j << ": " << moving_average_block_size[j] << std::endl;
+            // }
+            std::cout << "#################### LOCAL AVERAGE ####################"
+                      << std::endl;
+            for (int j = 0; j < local_average_block_size.size(); ++j) {
+                std::cout << j << ": " << local_average_block_size[j] << std::endl;
+            }
 
-        CTikz tikz_canvas;
-        CTikz tikz_global_bb;
-        CTikz tikz_presence_cacheline;
-        CTikz stacked_accesses;
+            if (i < 1000)
+                i += 100;
+            else
+                i += 1000;
+        }*/
+
+    // TODO: Extract to drawing functions
+    CTikz tikz_canvas;
+    CTikz tikz_global_bb;
+    CTikz tikz_presence_cacheline;
+    CTikz stacked_accesses;
+    try {
         std::vector<double> idx(65);
         std::iota(std::begin(idx), std::end(idx), 0);
-        tikz_canvas.addData_vd(idx, relative_histogram, "Bytes Accessed/Cacheline",
-                               "blue");
+        tikz_canvas.addData_vd(idx, relative_histogram,
+                               "Bytes Accessed in Basic Block/Cacheline", "blue");
         tikz_global_bb.addData_vd(idx, overall_accessed_histgram, "#Bytes/Line (overall)",
                                   "red");
-        std::ostringstream oss;
-        oss << output_dir << "numberofbytespercacheline_instr_" << handled_instructions
-            << ".tikz" << std::endl;
-        std::string file = oss.str();
-        oss.clear();
-        oss << output_dir << "numberofbytespercacheline_global_instr_"
-            << handled_instructions << ".tikz" << std::endl;
-        std::string global_file = oss.str();
+        tikz_presence_cacheline.addData_vd(idx, count_accessed_bytes_per_cacheline,
+                                           "\\#Bytes Accessed/Cacheline", "green");
         // tikz_canvas.createTikzPdfHist_vd(file, 64, 1, 64);
         // file += "norm.tikz";
         tikz_canvas.setXlabel_vd("\\#Useful bytes in Cacheline");
         tikz_canvas.setYlabel_vd("Relative frequency");
         tikz_canvas.setLegendStyle_vd("draw=none");
         tikz_canvas.addAdditionalSettings_vd("legend pos={outer north east}");
-        tikz_canvas.createTikzPdf_vd(file);
-        tikz_global_bb.createTikzPdf_vd(global_file);
+        tikz_presence_cacheline.setXlabel_vd("\\#Accessed bytes in Cacheline");
+        tikz_presence_cacheline.setYlabel_vd("Count");
+        tikz_presence_cacheline.setLegendStyle_vd("draw=none");
+        tikz_presence_cacheline.addAdditionalSettings_vd("legend pos={outer north east}");
+
     } catch (const CException &e) {
         std::cerr << e.what() << '\n';
         exit(-1);
+    }
+    bool created = false;
+    int counter = 0;
+    while (!created) {
+        try {
+            std::ostringstream oss;
+            oss << output_dir << "numberofbytespercacheline_instr_"
+                << handled_instructions << "." << counter << ".tikz";
+            std::string file = oss.str();
+            oss.str("");
+            oss.clear();
+            oss << output_dir << "numberofbytespercacheline_global_instr_"
+                << handled_instructions << "." << counter << ".tikz";
+            std::string global_file = oss.str();
+            oss.str("");
+            oss.clear();
+            oss << output_dir << "numberofaccessedinstr_per_cacheline_"
+                << handled_instructions << "." << counter << ".tikz";
+            std::string cacheline_local_file = oss.str();
+            tikz_canvas.createTikzPdf_vd(file);
+            tikz_global_bb.createTikzPdf_vd(global_file);
+            tikz_presence_cacheline.createTikzPdf_vd(cacheline_local_file);
+            created = true;
+        } catch (const CException &e) {
+            std::cerr << e.what() << '\n';
+            counter++;
+            if (counter == 100) {
+                created = true;
+                std::cout << "WARNING: COULDN'T CREATE GRAPH FILES" << std::endl;
+            }
+        }
     }
 
     std::cout << "Number of total cachelines: " << number_of_bytes_accessed.size()
@@ -672,14 +780,20 @@ basic_block_stats_t::print_bytes_accessed()
  * @param histogram The histogram vector containing the aggregated count
  * @param accesses A vector containing the history of cachelines accessed bit counts,
  * measured over one presence in L1-I
+ *
+ * @result The total of all accesses encoded in accesses.
  */
-void
+size_t
 basic_block_stats_t::create_histogram_of_cachelineaccesses(
-    std::vector<uint64_t> &histogram, std::vector<uint8_t> &accesses)
+    std::vector<uint64_t> &histogram, std::vector<hitbytes> &accesses)
 {
+    size_t total_accesses = 0;
     for (auto it = accesses.begin(); it != accesses.end(); it++) {
-        histogram[*it] += 1;
+        histogram[it->second] += it->first;
+        total_accesses += it->first;
     }
+
+    return total_accesses;
 }
 
 void
@@ -694,15 +808,15 @@ basic_block_stats_t::print_stats(std::string prefix)
     std::cout << prefix << "bb byte size:" << std::endl;
     for (auto it = count_per_basic_block_byte_size_.begin()++;
          it != count_per_basic_block_byte_size_.end(); it++) {
-        std::cout << prefix << "    " << it - count_per_basic_block_byte_size_.begin()
-                  << ": " << *it << std::endl;
+        std::cout << "    " << it - count_per_basic_block_byte_size_.begin() << ": "
+                  << *it << std::endl;
     }
 
     std::cout << prefix << "bb instr size:" << std::endl;
     for (auto it = count_per_basic_block_instr_size_.begin();
          it != count_per_basic_block_instr_size_.end(); it++) {
-        std::cout << prefix << "    " << it - count_per_basic_block_instr_size_.begin()
-                  << ": " << *it << std::endl;
+        std::cout << "    " << it - count_per_basic_block_instr_size_.begin() << ": "
+                  << *it << std::endl;
     }
 
     print_bytes_accessed();
@@ -716,6 +830,7 @@ basic_block_stats_t::print_stats(std::string prefix)
     */
 
     std::cout << "Total L1-I Instructions: " << handled_instructions << std::endl;
+    std::cout << "\tInterrupts:\t" << num_interrupts << std::endl;
     caching_device_stats_t::print_stats(prefix);
 }
 
@@ -752,5 +867,6 @@ basic_block_stats_t::reset()
     basic_blocks_hit_count.clear();
     number_of_bytes_accessed.clear();
     handled_instructions = 0;
+    num_interrupts = 0;
     bytes_accessed_per_presence_per_cacheline.clear();
 }

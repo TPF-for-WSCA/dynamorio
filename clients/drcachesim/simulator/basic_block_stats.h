@@ -23,6 +23,13 @@ struct BasicBlock {
     mutable bool miss = true;
 };
 
+/**
+ * @brief hitbytes describes a pair [counter, accessed bytes],
+ * denoting how often the number of bytes were accessed
+ *
+ */
+typedef std::pair<size_t, uint8_t> hitbytes;
+
 void
 print_type(trace_type_t type);
 
@@ -108,19 +115,20 @@ private:
     uint64_t
     bytes_accessed_by_block(const addr_t &cacheline_base, BasicBlock &block);
 
-    std::pair<uint8_t, std::vector<uint8_t>>
+    std::pair<uint8_t, std::vector<hitbytes>>
     bytes_accessed(const addr_t &cacheline_base,
                    std::vector<BasicBlock> &blocks_contained);
 
     void
     print_bytes_accessed();
 
-    void
+    size_t
     create_histogram_of_cachelineaccesses(std::vector<uint64_t> &histogram,
-                                          std::vector<uint8_t> &accesses);
+                                          std::vector<hitbytes> &accesses);
 
     size_t max_cacheline_bb = 0;
     size_t handled_instructions = 0;
+    size_t num_interrupts = 0;
     const std::string output_dir;
     size_t max_instr_size = 0;
     BasicBlock current_block;
