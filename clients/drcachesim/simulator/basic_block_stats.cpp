@@ -724,6 +724,11 @@ basic_block_stats_t::print_bytes_accessed()
         std::cout << i << ": " << count_accessed_bytes_per_cacheline[i] << std::endl;
     }
 
+    std::cout << "Accessed blocks in cachelines" << std::endl;
+    for (int i = 0; i < access_sizes_to_cache.size(); i++) {
+        std::cout << (i + 1) << ": " << access_sizes_to_cache[i] << std::endl;
+    }
+
     for (size_t i = 0; i <
          count_accesses_of_accessed_bytes_per_total_accessed_bytes_of_cacheline.size();
          ++i) {
