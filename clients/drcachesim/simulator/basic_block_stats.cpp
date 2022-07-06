@@ -21,7 +21,7 @@
 #include "stdlib.h"
 #include "string.h"
 
-#define ANALYSED_INSTRUCTIONS_PER_ITERATION 120000000
+#define ANALYSED_INSTRUCTIONS_PER_ITERATION 1500000
 
 /**
  * @brief Parses status line
@@ -202,11 +202,9 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
         current_block_cacheline_constrained.starting_addr & cache_line_address_mask;
     auto curr_cacheline_base_address = memref.instr.addr & cache_line_address_mask;
 
-    // TODO: COUNT INTERRUPTS
-    auto interrupt_diff = memref.data.addr -
-        (current_block_cacheline_constrained.starting_addr +
-         current_block_cacheline_constrained.byte_size);
-    bool is_adjacent_instr = interrupt_diff == 0;
+    bool is_adjacent_instr = (memref.data.addr ==
+                              (current_block_cacheline_constrained.starting_addr +
+                               current_block_cacheline_constrained.byte_size));
 
     // We do not orient ourselves at branches but only at cacheline base_addresses and
     // corresponding jumps
@@ -293,7 +291,7 @@ basic_block_stats_t::track_cacheline_access(const memref_t &memref)
         ? cacheline_end_address + 64
         : cacheline_end_address;
 
-    if (cacheline_end_address - cacheline_start_address >= max_cacheline_bb) {
+    if (cacheline_end_address - cacheline_start_address > max_cacheline_bb) {
         max_cacheline_bb = cacheline_end_address - cacheline_start_address;
         std::cout << "Current largest overlap of a basic block: " << max_cacheline_bb / 64
                   << " lines" << std::endl;
@@ -385,6 +383,12 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
     //     std::cout << "CURRENT RAM: " << current_ram_consumption << " MB" << std::endl;
     // }
 
+    double progress =
+        ((double)handled_instructions / ANALYSED_INSTRUCTIONS_PER_ITERATION) * 100.0;
+    if (handled_instructions % 100000 == 0) {
+        std::cout << "PROGRESS " << progress << "%" << std::endl;
+    }
+
     if (type_is_prefetch(memref.data.type)) {
         std::cout << "YES SAW A PREFETCH" << std::endl;
         return; // we only care about executed instrs
@@ -440,6 +444,77 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         reset();
         handled_instructions = prev;
     }
+}
+
+/**
+ * @brief Aggregate access counts per contiguous blocks with the same access patterns.
+ * The current implementation could lead to falsely counting too long blocks.
+ *
+ * @param access_masks Vector of masks indicating which bytes were accessed contiguously
+ * @return std::vector<uint64_t> Vector of size 64, counting the number of accesses to
+ * blocks of size (idx + 1).
+ */
+std::vector<uint64_t>
+basic_block_stats_t::aggregate_byte_accesses_in_cacheline_presence(
+    const std::vector<uint64_t> &access_masks)
+{
+    std::vector<int> byte_bucket_indices(64);
+    std::vector<uint64_t> byte_bucket(64, 0);
+    std::iota(std::begin(byte_bucket_indices), std::end(byte_bucket_indices), 0);
+    std::for_each(std::execution::par, std::begin(byte_bucket_indices),
+                  std::end(byte_bucket_indices),
+                  [&access_masks, &byte_bucket](auto &&byte) {
+                      for (const auto &mask : access_masks) {
+                          if (((mask >> byte) & 0x1) == 1) {
+                              byte_bucket[byte]++;
+                          }
+                      }
+                  });
+
+    std::vector<uint64_t> result(65, 0);
+    uint64_t access_count = 0;
+    uint64_t byte_count = 0;
+    for (auto &loc_access_count : byte_bucket) {
+        if (access_count == loc_access_count) {
+            byte_count += 1;
+        } else {
+            result[byte_count] += access_count;
+            access_count = loc_access_count;
+            byte_count = 1;
+        }
+    }
+    if (access_count != 0) {
+        result[byte_count] += access_count;
+    }
+
+    result.erase(result.begin());
+    return result;
+}
+
+/**
+ * @brief Aggregate access counts over multiple presences of a single memory region, split
+ * by cache line.
+ *
+ * @param cacheline_presences Vector containing all presences of current cacheline.
+ * @return std::vector<uint64_t> Vector of size 64 indicating the number of accesses to
+ * blocks of size (idx + 1) within the current cacheline.
+ */
+std::vector<uint64_t>
+basic_block_stats_t::aggregate_byte_accesses_in_cacheline(
+    const std::vector<std::vector<uint64_t>> &cacheline_presences)
+{
+    std::vector<uint64_t> result(64, 0);
+    std::vector<uint64_t> pref_aggregation;
+    for (auto &masks : cacheline_presences) {
+        auto aggregated_masks = aggregate_byte_accesses_in_cacheline_presence(masks);
+        if (pref_aggregation.size() > 0 && aggregated_masks != pref_aggregation) {
+            std::cout << "WE SEE SOME DIFFERENT BEHAVIOUR THAN LAST TIME" << std::endl;
+        }
+        std::transform(result.begin(), result.end(), aggregated_masks.begin(),
+                       result.begin(), std::plus<uint64_t>());
+        pref_aggregation = aggregated_masks;
+    }
+    return result;
 }
 
 void
@@ -620,9 +695,14 @@ basic_block_stats_t::print_bytes_accessed()
             65, std::vector<size_t>(65, 0));
 
     std::vector<double> count_accessed_bytes_per_cacheline(65, 0.0);
+    std::vector<uint64_t> access_sizes_to_cache(64, 0);
     // TODO: Replace by parallel foreach loops
     for (auto const &[cacheline_baseaddress, accesses_per_presence] :
          bytes_accessed_per_presence_per_cacheline) {
+        auto tmp_result = aggregate_byte_accesses_in_cacheline(accesses_per_presence);
+        std::transform(access_sizes_to_cache.begin(), access_sizes_to_cache.end(),
+                       tmp_result.begin(), access_sizes_to_cache.begin(),
+                       std::plus<uint64_t>());
         for (auto const &accesses : accesses_per_presence) {
             uint8_t total_accessed_bytes = get_total_access_from_masks(accesses);
             count_accessed_bytes_per_cacheline[total_accessed_bytes]++;

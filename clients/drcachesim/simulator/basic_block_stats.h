@@ -109,6 +109,14 @@ private:
     void
     print_last_n_memrefs(int n);
 
+    std::vector<uint64_t>
+    aggregate_byte_accesses_in_cacheline_presence(
+        const std::vector<uint64_t> &access_masks);
+
+    std::vector<uint64_t>
+    aggregate_byte_accesses_in_cacheline(
+        const std::vector<std::vector<uint64_t>> &cacheline_presences);
+
     void
     track_cacheline_access(const memref_t &memref);
 
