@@ -348,7 +348,6 @@ caching_device_t::propagate_eviction(addr_t tag, const caching_device_t *request
             }
         }
     }
-
     // Neither this cache nor its children hold line,
     // inform snoop filter or propagate eviction.
     if (snoop_filter_ != NULL) {

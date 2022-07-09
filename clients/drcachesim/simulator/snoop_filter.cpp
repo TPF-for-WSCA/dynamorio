@@ -113,6 +113,8 @@ snoop_filter_t::snoop_eviction(addr_t tag, int id)
     // Check that we currently have this cache marked as a sharer.
     assert(coherence_entry->sharers[id]);
 
+    std::cout << "evicted cacheline [" << (tag << 6) << "/"
+              << "]" << std::endl;
     if (coherence_entry->dirty) {
         num_writebacks_++;
         coherence_entry->dirty = false;

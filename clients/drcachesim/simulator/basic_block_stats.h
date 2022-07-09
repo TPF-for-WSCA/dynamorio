@@ -104,7 +104,13 @@ private:
     reset_current_cacheline_block(const memref_t &memref, bool hit);
 
     void
-    record_memref(memref_t m);
+    record_cacheblock(const caching_device_block_t &t);
+
+    void
+    print_last_n_cacheblocks(int n);
+
+    void
+    record_memref(memref_t m, bool hit);
 
     void
     print_last_n_memrefs(int n);
@@ -142,7 +148,8 @@ private:
     BasicBlock current_block;
     BasicBlock current_block_cacheline_constrained;
     static const size_t cache_line_address_mask = 0xFFFFFFFFFFFFFFC0;
-    std::deque<memref_t> basic_block_buffer;
+    std::deque<BasicBlock> basic_block_buffer;
+    std::deque<caching_device_block_t> cache_block_buffer;
 };
 
 #endif
