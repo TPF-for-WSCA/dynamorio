@@ -150,6 +150,8 @@ private:
     static const size_t cache_line_address_mask = 0xFFFFFFFFFFFFFFC0;
     std::deque<BasicBlock> basic_block_buffer;
     std::deque<caching_device_block_t> cache_block_buffer;
+    // TODO: Implement counter function for this (mapping of current access cacheline size to set of distinct addresses)
+    std::vector<std::set<addr_t>> distinct_cachelines_by_size;
 };
 
 #endif

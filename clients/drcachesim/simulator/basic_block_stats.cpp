@@ -143,6 +143,7 @@ basic_block_stats_t::basic_block_stats_t(int block_size, const std::string &miss
     , output_dir(output_dir)
     , current_block({ 0, 0, 0, 0 })
     , basic_block_buffer()
+    , distinct_cachelines_by_size(65)
 {
     basic_block_size_history.reserve(10000);
     basic_blocks_hit_count.reserve(10000);
@@ -741,6 +742,8 @@ basic_block_stats_t::print_bytes_accessed()
                        std::plus<uint64_t>());
         for (auto const &accesses : accesses_per_presence) {
             uint8_t total_accessed_bytes = get_total_access_from_masks(accesses);
+            distinct_cachelines_by_size[total_accessed_bytes].insert(
+                cacheline_baseaddress);
             count_accessed_bytes_per_cacheline[total_accessed_bytes]++;
             for (auto const &mask : accesses) {
                 // TODO: Assert that no mask is non-contiguous
@@ -760,6 +763,11 @@ basic_block_stats_t::print_bytes_accessed()
                 continue;
             num_lines_with_accesses_of_size[i] += 1;
         }
+    }
+
+    for (int i = 0; i < distinct_cachelines_by_size.size(); i++) {
+        std::cout << (i + 1) << ": " << distinct_cachelines_by_size[i].size()
+                  << std::endl;
     }
 
     for (size_t i = 1; i < count_accessed_bytes_per_cacheline.size(); i++) {
