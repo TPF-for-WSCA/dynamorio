@@ -21,7 +21,7 @@
 #include "stdlib.h"
 #include "string.h"
 
-#define ANALYSED_INSTRUCTIONS_PER_ITERATION 10000000
+#define ANALYSED_INSTRUCTIONS_PER_ITERATION 5000000
 
 /**
  * @brief Parses status line
@@ -276,14 +276,16 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
         // If we jumped addresses (without seeing a branch), then we have encountered
         // an interrupt/scheduling event
         current_block.instr_size++;
-        current_block_cacheline_constrained.instr_size++;
         current_block.byte_size += memref.data.size;
-        current_block_cacheline_constrained.byte_size += memref.data.size;
         current_block.end_addr = memref.data.addr;
+
+        current_block_cacheline_constrained.instr_size++;
+        current_block_cacheline_constrained.byte_size += memref.data.size;
         current_block_cacheline_constrained.end_addr = memref.data.addr;
         if (current_block_cacheline_constrained.byte_size > 64) {
             std::cout << "WTF is going on" << std::endl;
         }
+
     } else if (aliasing_eviction) {
         // do we need a seperate return value? or anything else?
     } else {
