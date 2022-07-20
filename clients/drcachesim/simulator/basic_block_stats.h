@@ -145,12 +145,14 @@ private:
     size_t num_interrupts = 0;
     const std::string output_dir;
     size_t max_instr_size = 0;
+    bool prev_hit = false;
     BasicBlock current_block;
     BasicBlock current_block_cacheline_constrained;
     static const size_t cache_line_address_mask = 0xFFFFFFFFFFFFFFC0;
     std::deque<BasicBlock> basic_block_buffer;
     std::deque<caching_device_block_t> cache_block_buffer;
-    // TODO: Implement counter function for this (mapping of current access cacheline size to set of distinct addresses)
+    // TODO: Implement counter function for this (mapping of current access cacheline size
+    // to set of distinct addresses)
     std::vector<std::set<addr_t>> distinct_cachelines_by_size;
 };
 
