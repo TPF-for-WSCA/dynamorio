@@ -1,3 +1,6 @@
 [submodule "clients/common/CTikz"]
 	path = clients/common/CTikz
 	url = https://github.com/mchlbrnhrd/CTikz.git
+[submodule "third_party/libipt"]
+    path = third_party/libipt
+    url = https://github.com/intel/libipt.git
