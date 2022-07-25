@@ -138,10 +138,11 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
             return;
         }
         snooped_caches_[(2 * i) + 1] = l1_dcaches_[i];
-
+        std::string output_dir = op_data_dir.get_value() + "/" +
+            std::to_string(knobs_.sim_refs) + "/" + std::to_string(knobs_.L1I_size);
         if (!l1_icaches_[i]->init(
                 knobs_.L1I_assoc, (int)knobs_.line_size, (int)knobs_.L1I_size, llc,
-                new basic_block_stats_t((int)knobs_.line_size, "", knobs.data_dir,
+                new basic_block_stats_t((int)knobs_.line_size, "", output_dir,
                                         warmup_enabled_, knobs_.model_coherence),
                 nullptr /*prefetcher*/, false /*inclusive*/, knobs_.model_coherence,
                 2 * i, snoop_filter_) ||
@@ -311,12 +312,13 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         // If cache is below a snoop filter, it should be marked as coherent.
         bool is_coherent_ = knobs_.model_coherence &&
             (non_coherent_caches_.find(cache_name) == non_coherent_caches_.end());
-
+        std::string output_dir = op_data_dir.get_value() + "/" +
+            std::to_string(knobs_.sim_refs) + "/" + std::to_string(cache_config.size);
         caching_device_stats_t *stats_collector;
         if (cache_config.type.compare("instruction") == 0) {
             stats_collector =
                 new basic_block_stats_t((int)knobs_.line_size, cache_config.miss_file,
-                                        knobs_.data_dir, warmup_enabled_, is_coherent_);
+                                        output_dir, warmup_enabled_, is_coherent_);
         } else {
             stats_collector =
                 new cache_stats_t((int)knobs_.line_size, cache_config.miss_file,

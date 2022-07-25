@@ -10,13 +10,16 @@
  */
 
 #include <iostream>
+#include <fstream>
 #include <iomanip>
 #include <cassert>
 #include <algorithm>
 #include <numeric>
 #include <execution>
+#include <sys/stat.h>
 
 #include "basic_block_stats.h"
+#include "../common/options.h"
 // DEBUGGING IMPORTS: HOW MUCH MEMORY DO WE USE
 #include "stdlib.h"
 #include "string.h"
@@ -151,7 +154,15 @@ basic_block_stats_t::basic_block_stats_t(int block_size, const std::string &miss
     , distinct_cachelines_by_size(65)
 {
     basic_block_size_history.reserve(10000);
-    basic_blocks_hit_count.reserve(10000);
+    // basic_blocks_hit_count.reserve(10000);
+
+    std::cout << "creating output dir: " << output_dir << std::endl;
+    std::string cmd = "/bin/mkdir -p " + output_dir;
+    const int dir_err = system(cmd.c_str());
+    if (0 != dir_err) {
+        std::cout << "Sth is wrong with the output dir: " << output_dir << std::endl;
+        exit(1);
+    }
 }
 
 void
@@ -377,19 +388,20 @@ basic_block_stats_t::handle_branch(const memref_t &memref)
 {
     // assuming x86, instructions in basic blocks have monotoneously increasing
     // addresses
-    if (current_block.starting_addr <= current_block.end_addr &&
-        current_block.starting_addr != 0) {
-        record_block(current_block);
-    } else {
-        printf("WARN: ADDRESS MISMATCH, BLOCK END IS SMALLER THAN BLOCK START\n");
-    }
+    // Deactivate for now: only tracing cachelines
+    // if (current_block.starting_addr <= current_block.end_addr &&
+    //     current_block.starting_addr != 0) {
+    //     record_block(current_block);
+    // } else {
+    //     printf("WARN: ADDRESS MISMATCH, BLOCK END IS SMALLER THAN BLOCK START\n");
+    // }
     // insert_bbcount(count_per_basic_block_byte_size_, current_block.byte_size);
     // insert_bbcount(count_per_basic_block_instr_size_, current_block.instr_size);
 
-    basic_blocks_hit_count[current_block] += 1;
-    // basic_block_size_history.push_back(current_block.byte_size);
+    //  basic_blocks_hit_count[current_block] += 1;
+    //  basic_block_size_history.push_back(current_block.byte_size);
 
-    track_cacheline_access(memref);
+    // track_cacheline_access(memref);
 
     if (basic_block_size_history.size() == basic_block_size_history.capacity()) {
         basic_block_size_history.reserve(basic_block_size_history.capacity() * 2);
@@ -436,7 +448,7 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
     //        ((double)handled_instructions / ANALYSED_INSTRUCTIONS_PER_ITERATION) *
     //        100.0;
     if (handled_instructions % 1000000 == 0) {
-        std::cout << "PROGRESS " << handled_instructions << "%\n";
+        std::cout << "PROGRESS " << handled_instructions << " instructions handled\n";
 
         size_t current_ram_consumption = getPhysicalRAMUsageValue() >> 10;
         // how much memory do I consume?
@@ -620,6 +632,7 @@ print_type(trace_type_t type)
     }
 }
 
+/*
 void
 basic_block_stats_t::record_block(const BasicBlock &bb)
 {
@@ -644,6 +657,7 @@ basic_block_stats_t::record_block(const BasicBlock &bb)
 
     target_bb_node->second += 1;
 }
+*/
 
 uint64_t
 basic_block_stats_t::bytes_accessed_by_block(const addr_t &cacheline_base,
@@ -793,43 +807,124 @@ basic_block_stats_t::print_bytes_accessed()
         }
     }
 
-    for (size_t i = 0; i < distinct_cachelines_by_size.size(); i++) {
-        std::cout << i << ": " << distinct_cachelines_by_size[i].size() << "\n";
+    std::ofstream distinct_cachelines_csv;
+    std::cout << "Write file to " << output_dir << std::endl;
+    distinct_cachelines_csv.open((output_dir + "/distinct_cachelines.csv"),
+                                 std::ios::out);
+    if (!distinct_cachelines_csv) {
+        std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
+                  << "/distinct_cachelines.csv\n";
+
+        std::cout << "==== DISTINCT COUNT OF CACHELINES OF ACCESSED REGION SIZE ====\n";
+        for (size_t i = 0; i < distinct_cachelines_by_size.size(); i++) {
+            std::cout << i << ": " << distinct_cachelines_by_size[i].size() << "\n";
+        }
+    } else {
+        distinct_cachelines_csv << "sep=;\n";
+        distinct_cachelines_csv << "ACCESSED BYTES;COUNT OF DISTINCT CACHELINES\n";
+        for (size_t i = 0; i < distinct_cachelines_by_size.size(); i++) {
+            distinct_cachelines_csv << i << ";" << distinct_cachelines_by_size[i].size()
+                                    << "\n";
+        }
+        distinct_cachelines_csv.flush();
+        distinct_cachelines_csv.close();
     }
 
     // for (size_t i = 0; i < count_accessed_bytes_per_cacheline.size(); i++) {
     //     std::cout << i << ": " << count_accessed_bytes_per_cacheline[i] << std::endl;
     // }
 
-    std::cout << "Number of cachelines loaded x times" << std::endl;
-    for (auto const &[loads, count] : distribution_of_presences) {
-        std::cout << loads << ": " << count << "\n";
-    }
+    std::ofstream chaeline_load_counts;
+    chaeline_load_counts.open((output_dir + "/cacheline_load_counts.csv"), std::ios::out);
+    if (!chaeline_load_counts) {
+        std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
+                  << "/cacheline_load_counts.csv\n";
 
-    std::cout << "Accessed blocks in cachelines" << std::endl;
-    for (size_t i = 0; i < access_sizes_to_cache.size(); i++) {
-        std::cout << (i + 1) << ": " << access_sizes_to_cache[i] << "\n";
-    }
-
-    std::cout << "Number of cachelines by access size" << std::endl;
-    for (size_t i = 0; i < num_lines_with_accesses_of_size.size(); i++) {
-        std::cout << (i + 1) << ": " << num_lines_with_accesses_of_size[i] << "\n";
-    }
-
-    for (size_t i = 0; i <
-         count_accesses_of_accessed_bytes_per_total_accessed_bytes_of_cacheline.size();
-         ++i) {
-        auto accesses =
-            count_accesses_of_accessed_bytes_per_total_accessed_bytes_of_cacheline[i];
-        std::cout << i << ": ";
-        for (size_t j = 1; j < accesses.size(); ++j) {
-            if (i == 0) {
-                std::cout << j << ": ";
-                continue;
-            }
-            std::cout << accesses[j] << ":";
+        std::cout << "==== NUMBER OF CACHELINES SEEN X TIMES ====\n";
+        for (auto const &[loads, count] : distribution_of_presences) {
+            std::cout << loads << ": " << count << "\n";
         }
-        std::cout << std::endl;
+    } else {
+        chaeline_load_counts << "sep=;\n";
+        chaeline_load_counts << "#LOADS;#CACHELINES\n";
+        for (auto const &[loads, count] : distribution_of_presences) {
+            chaeline_load_counts << loads << ";" << count << "\n";
+        }
+        chaeline_load_counts.flush();
+        chaeline_load_counts.close();
+    }
+
+    std::ofstream access_count_to_cl_of_size;
+    access_count_to_cl_of_size.open((output_dir + "/access_count_to_cl_of_size.csv"),
+                                    std::ios::out);
+    if (!access_count_to_cl_of_size) {
+        std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
+                  << "/access_count_to_cl_of_size.csv\n";
+
+        std::cout << "==== NUMBER OF ACCESSES TO LINE OF SIZE ====\n";
+        for (size_t i = 0; i < access_sizes_to_cache.size(); i++) {
+            std::cout << (i + 1) << ": " << access_sizes_to_cache[i] << "\n";
+        }
+    } else {
+        access_count_to_cl_of_size << "sep=;\n";
+        access_count_to_cl_of_size << "ACCESS SIZE;#ACCESSES\n";
+        for (size_t i = 0; i < access_sizes_to_cache.size(); i++) {
+            access_count_to_cl_of_size << (i + 1) << ";" << access_sizes_to_cache[i]
+                                       << "\n";
+        }
+        access_count_to_cl_of_size.flush();
+        access_count_to_cl_of_size.close();
+    }
+
+    std::ofstream number_of_cachelines_size;
+    number_of_cachelines_size.open((output_dir + "/number_of_cachelines_size.csv"),
+                                   std::ios::out);
+    if (!number_of_cachelines_size) {
+        std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
+                  << "/number_of_cachelines_size.csv\n";
+
+        std::cout << "==== NUMBER OF CACHELINES OF SIZE ====\n";
+        for (size_t i = 0; i < num_lines_with_accesses_of_size.size(); i++) {
+            std::cout << (i + 1) << ": " << num_lines_with_accesses_of_size[i] << "\n";
+        }
+
+    } else {
+        number_of_cachelines_size << "sep=;\n";
+        number_of_cachelines_size << "ACCESS SIZE;#CACHELINES\n";
+        for (size_t i = 0; i < num_lines_with_accesses_of_size.size(); i++) {
+            number_of_cachelines_size << (i + 1) << ";"
+                                      << num_lines_with_accesses_of_size[i] << "\n";
+        }
+        number_of_cachelines_size.flush();
+        number_of_cachelines_size.close();
+    }
+
+    std::ofstream count_of_access_sizes_per_total_accessed_bytes_per_presence;
+    count_of_access_sizes_per_total_accessed_bytes_per_presence.open(
+        (output_dir + "/count_of_access_sizes_per_total_accessed_bytes_per_presence.csv"),
+        std::ios::out);
+    if (count_of_access_sizes_per_total_accessed_bytes_per_presence) {
+        count_of_access_sizes_per_total_accessed_bytes_per_presence << "sep=;\n";
+        for (size_t i = 0;
+             i < count_accesses_of_accessed_bytes_per_total_accessed_bytes_of_cacheline
+                     .size();
+             ++i) {
+            auto accesses =
+                count_accesses_of_accessed_bytes_per_total_accessed_bytes_of_cacheline[i];
+            count_of_access_sizes_per_total_accessed_bytes_per_presence << i << ";";
+            for (size_t j = 1; j < accesses.size(); ++j) {
+                if (i == 0) {
+                    count_of_access_sizes_per_total_accessed_bytes_per_presence << j
+                                                                                << ";";
+                    continue;
+                }
+                count_of_access_sizes_per_total_accessed_bytes_per_presence << accesses[j]
+                                                                            << ";";
+            }
+            count_of_access_sizes_per_total_accessed_bytes_per_presence << "\n";
+        }
+        count_of_access_sizes_per_total_accessed_bytes_per_presence.flush();
+        count_of_access_sizes_per_total_accessed_bytes_per_presence.close();
     }
 
     // std::vector<std::vector<double>>
@@ -878,73 +973,74 @@ basic_block_stats_t::print_bytes_accessed()
         }*/
 
     // TODO: Extract to drawing functions
-    CTikz tikz_canvas;
-    CTikz tikz_global_bb;
-    CTikz tikz_presence_cacheline;
+    // CTikz tikz_canvas;
+    // CTikz tikz_global_bb;
+    // CTikz tikz_presence_cacheline;
     // CTikz stacked_accesses;
-    try {
-        std::vector<double> idx(65);
-        std::iota(std::begin(idx), std::end(idx), 0);
-        tikz_canvas.addData_vd(idx, relative_histogram,
-                               "Bytes Accessed in Basic Block/Cacheline", "blue");
-        tikz_global_bb.addData_vd(idx, overall_accessed_histgram, "#Bytes/Line (overall)",
-                                  "red");
-        // tikz_presence_cacheline.addData_vd(idx, count_accessed_bytes_per_cacheline,
-        //                                   "\\#Bytes Accessed/Cacheline", "green");
-        // tikz_canvas.createTikzPdfHist_vd(file, 64, 1, 64);
-        // file += "norm.tikz";
-        tikz_canvas.setXlabel_vd("\\#Useful bytes in Cacheline");
-        tikz_canvas.setYlabel_vd("Relative frequency");
-        tikz_canvas.setLegendStyle_vd("draw=none");
-        tikz_canvas.addAdditionalSettings_vd("legend pos={outer north east}");
-        // tikz_presence_cacheline.setXlabel_vd("\\#Accessed bytes in Cacheline");
-        // tikz_presence_cacheline.setYlabel_vd("Count");
-        // tikz_presence_cacheline.setLegendStyle_vd("draw=none");
-        // tikz_presence_cacheline.addAdditionalSettings_vd("legend pos={outer north
-        // east}");
+    // try {
+    //     std::vector<double> idx(65);
+    //     std::iota(std::begin(idx), std::end(idx), 0);
+    //     tikz_canvas.addData_vd(idx, relative_histogram,
+    //                            "Bytes Accessed in Basic Block/Cacheline", "blue");
+    //     tikz_global_bb.addData_vd(idx, overall_accessed_histgram, "#Bytes/Line
+    //     (overall)",
+    //                               "red");
+    //     // tikz_presence_cacheline.addData_vd(idx, count_accessed_bytes_per_cacheline,
+    //     //                                   "\#Bytes Accessed/Cacheline", "green");
+    //     // tikz_canvas.createTikzPdfHist_vd(file, 64, 1, 64);
+    //     // file += "norm.tikz";
+    //     tikz_canvas.setXlabel_vd("\#Useful bytes in Cacheline");
+    //     tikz_canvas.setYlabel_vd("Relative frequency");
+    //     tikz_canvas.setLegendStyle_vd("draw=none");
+    //     tikz_canvas.addAdditionalSettings_vd("legend pos={outer north east}");
+    //     // tikz_presence_cacheline.setXlabel_vd("\#Accessed bytes in Cacheline");
+    //     // tikz_presence_cacheline.setYlabel_vd("Count");
+    //     // tikz_presence_cacheline.setLegendStyle_vd("draw=none");
+    //     // tikz_presence_cacheline.addAdditionalSettings_vd("legend pos={outer north
+    //     // east}");
+    //
+    // } catch (const CException &e) {
+    //     std::cerr << e.what() << '\n';
+    //     exit(-1);
+    // }
+    // bool created = false;
+    // int counter = 0;
+    // while (!created) {
+    //     try {
+    //         std::ostringstream oss;
+    //         oss << output_dir << "numberofbytespercacheline_instr_"
+    //             << handled_instructions << "." << counter << ".tikz";
+    //         std::string file = oss.str();
+    //         oss.str("");
+    //         oss.clear();
+    //         oss << output_dir << "numberofbytespercacheline_global_instr_"
+    //             << handled_instructions << "." << counter << ".tikz";
+    //         std::string global_file = oss.str();
+    //         oss.str("");
+    //         oss.clear();
+    //         oss << output_dir << "numberofaccessedinstr_per_cacheline_"
+    //             << handled_instructions << "." << counter << ".tikz";
+    //         std::string cacheline_local_file = oss.str();
+    //         tikz_canvas.createTikzPdf_vd(file);
+    //         tikz_global_bb.createTikzPdf_vd(global_file);
+    //         // tikz_presence_cacheline.createTikzPdf_vd(cacheline_local_file);
+    //         created = true;
+    //     } catch (const CException &e) {
+    //         std::cerr << e.what() << '\n';
+    //         counter++;
+    //         if (counter == 100) {
+    //             created = true;
+    //             std::cout << "WARNING: COULDN'T CREATE GRAPH FILES" << std::endl;
+    //         }
+    //     }
+    // }
 
-    } catch (const CException &e) {
-        std::cerr << e.what() << '\n';
-        exit(-1);
-    }
-    bool created = false;
-    int counter = 0;
-    while (!created) {
-        try {
-            std::ostringstream oss;
-            oss << output_dir << "numberofbytespercacheline_instr_"
-                << handled_instructions << "." << counter << ".tikz";
-            std::string file = oss.str();
-            oss.str("");
-            oss.clear();
-            oss << output_dir << "numberofbytespercacheline_global_instr_"
-                << handled_instructions << "." << counter << ".tikz";
-            std::string global_file = oss.str();
-            oss.str("");
-            oss.clear();
-            oss << output_dir << "numberofaccessedinstr_per_cacheline_"
-                << handled_instructions << "." << counter << ".tikz";
-            std::string cacheline_local_file = oss.str();
-            tikz_canvas.createTikzPdf_vd(file);
-            tikz_global_bb.createTikzPdf_vd(global_file);
-            // tikz_presence_cacheline.createTikzPdf_vd(cacheline_local_file);
-            created = true;
-        } catch (const CException &e) {
-            std::cerr << e.what() << '\n';
-            counter++;
-            if (counter == 100) {
-                created = true;
-                std::cout << "WARNING: COULDN'T CREATE GRAPH FILES" << std::endl;
-            }
-        }
-    }
-
-    std::cout << "Number of total cachelines: " << number_of_bytes_accessed.size()
-              << std::endl;
-    std::cout << "Number of useful bytes : Number of cachelines" << std::endl;
-    for (size_t i = 0; i < histogram.size(); i++) {
-        std::cout << i << ": " << histogram[i] << "\n";
-    }
+    // std::cout << "Number of total cachelines: " << number_of_bytes_accessed.size()
+    //           << std::endl;
+    // std::cout << "Number of useful bytes : Number of cachelines" << std::endl;
+    // for (size_t i = 0; i < histogram.size(); i++) {
+    //     std::cout << i << ": " << histogram[i] << "\n";
+    // }
 }
 
 /**

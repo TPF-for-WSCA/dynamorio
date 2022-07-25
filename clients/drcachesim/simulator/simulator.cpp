@@ -91,10 +91,8 @@ simulator_t::process_memref(const memref_t &memref)
             min_core = find_emptiest_core(cpu_counts_);
             ++cpu_counts_[min_core];
             cpu2core_[cpu] = min_core;
-            if (knob_verbose_ >= 1) {
-                std::cerr << "new cpu " << cpu << " => core " << min_core
-                          << " (count=" << cpu_counts_[min_core] << ")" << std::endl;
-            }
+            std::cerr << "new cpu " << cpu << " => core " << min_core
+                      << " (count=" << cpu_counts_[min_core] << ")" << std::endl;
         } else
             min_core = exists->second;
         auto prior = thread2core_.find(memref.marker.tid);

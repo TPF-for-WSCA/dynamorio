@@ -160,7 +160,7 @@ droption_t<std::string> op_LL_miss_file(
     "<program counter, stride, locality level> tuple.");
 
 droption_t<std::string>
-    op_data_dir(DROPTION_SCOPE_FRONTEND, "data_dir", "",
+    op_data_dir(DROPTION_SCOPE_ALL, "data_dir", "",
                 "If non empty, output files will be written to the data directory",
                 "Certain analyzers write output files, such as graphs and similar, "
                 "which either will be written to data_dir or to the current working "

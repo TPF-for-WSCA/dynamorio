@@ -117,8 +117,7 @@ get_cache_simulator_knobs()
     knobs->LL_size = op_LL_size.get_value();
     knobs->LL_assoc = op_LL_assoc.get_value();
     knobs->LL_miss_file = op_LL_miss_file.get_value();
-    knobs->data_dir = op_data_dir.get_value().c_str();
-    knobs->data_dir = get_aux_file_path("", "");
+    knobs->data_dir = op_data_dir.get_value();
     knobs->model_coherence = op_coherence.get_value();
     knobs->replace_policy = op_replace_policy.get_value();
     knobs->data_prefetcher = op_data_prefetcher.get_value();
@@ -147,11 +146,6 @@ drmemtrace_analysis_tool_create()
         return cache_miss_analyzer_create(*knobs, op_miss_count_threshold.get_value(),
                                           op_miss_frac_threshold.get_value(),
                                           op_confidence_threshold.get_value());
-    } else if (op_simulator_type.get_value() == BB_ANALYZER) {
-        cache_simulator_knobs_t *knobs = get_cache_simulator_knobs();
-        knobs->num_cores = op_num_cores.get_value();
-        printf("WTF NOT COMPLETE");
-        return nullptr;
     } else if (op_simulator_type.get_value() == TLB) {
         tlb_simulator_knobs_t knobs;
         knobs.num_cores = op_num_cores.get_value();
