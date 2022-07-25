@@ -6,15 +6,15 @@
 # modification, are permitted provided that the following conditions are met:
 #
 # * Redistributions of source code must retain the above copyright notice,
-#   this list of conditions and the following disclaimer.
+# this list of conditions and the following disclaimer.
 #
 # * Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
 #
 # * Neither the name of Google, Inc. nor the names of its contributors may be
-#   used to endorse or promote products derived from this software without
-#   specific prior written permission.
+# used to endorse or promote products derived from this software without
+# specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -33,70 +33,73 @@ cmake_minimum_required(VERSION 3.7)
 
 include(../../make/policies.cmake NO_POLICY_SCOPE)
 
-if (WIN32)
+if(WIN32)
   set(os_name "win")
+
   # Our non-client files assume this is set, yet don't include headers that set it.
   add_definitions(-DWINDOWS)
-else ()
+else()
   set(os_name "unix")
+
   # Ditto.
   add_definitions(-DUNIX)
-endif ()
+endif()
 
 # GCC 6+ has a warning for an ABI change due to a bug introduced in GCC 5:
 # http://gcc.gnu.org/bugzilla/show_bug.cgi?id=77728. As we are building all of
 # drcachesim and not linking to other C++ code, we can just ignore it.
-if (ARM AND CMAKE_COMPILER_IS_GNUCC)
+if(ARM AND CMAKE_COMPILER_IS_GNUCC)
   include(CheckCXXCompilerFlag)
   CHECK_CXX_COMPILER_FLAG(-Wno-psabi GCC_HAS_NO_PSABI)
-  if (GCC_HAS_NO_PSABI)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-psabi")
-  endif (GCC_HAS_NO_PSABI)
-endif ()
+
+  if(GCC_HAS_NO_PSABI)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-psabi -std=c++17")
+  endif(GCC_HAS_NO_PSABI)
+endif()
 
 # i#2277: we use zlib if available to read compressed trace files.
 # XXX: we could ship with a zlib for Windows: today we simply don't support
 # compressed traces on Windows.
-if (ZLIB_FOUND)
+if(ZLIB_FOUND)
   add_definitions(-DHAS_ZLIB)
   include_directories(${ZLIB_INCLUDE_DIRS})
   set(zlib_reader reader/compressed_file_reader.cpp)
-else ()
+else()
   set(zlib_reader "")
 endif()
 
-if (libsnappy)
+if(libsnappy)
   add_definitions(-DHAS_SNAPPY)
   set(snappy_reader
     reader/snappy_file_reader.cpp
     common/snappy_consts.cpp
     common/crc32c.cpp
-    )
-else ()
+  )
+else()
   set(snappy_reader "")
 endif()
 
-if (liblz4)
+if(liblz4)
   add_definitions(-DHAS_LZ4)
-endif ()
+endif()
 
 set(client_and_sim_srcs
   common/named_pipe_${os_name}.cpp
   common/options.cpp
   common/trace_entry.cpp)
 
-  set(common/CTikz/CTikz.cpp
-    common/CTikz/CException.cpp)
+set(common/CTikz/CTikz.cpp
+  common/CTikz/CException.cpp)
 
 # i#2006: we split our tools into libraries for combining as desired in separate
 # launchers.  Since they are exported in the same dir as other tools like drcov,
 # we use a drmemtrace_ prefix.
-macro (add_exported_library name type)
+macro(add_exported_library name type)
   add_library(${name} ${type} ${ARGN})
   DR_export_target(${name})
   install_exported_target(${name} ${INSTALL_CLIENTS_LIB})
   add_dependencies(${name} api_headers)
-endmacro ()
+endmacro()
 
 add_exported_library(drmemtrace_reuse_distance STATIC tools/reuse_distance.cpp)
 add_exported_library(drmemtrace_histogram STATIC tools/histogram.cpp)
@@ -124,23 +127,23 @@ add_exported_library(drmemtrace_simulator STATIC
   simulator/snoop_filter.cpp
   simulator/tlb.cpp
   simulator/tlb_simulator.cpp
-  )
+)
 
 add_exported_library(directory_iterator STATIC common/directory_iterator.cpp)
 add_dependencies(directory_iterator api_headers)
 target_link_libraries(directory_iterator drfrontendlib)
 
 # Right now drpt2trace only works on Linux x86_64.
-if (LINUX AND X86 AND X64)
+if(LINUX AND X86 AND X64)
   # Building drpt2trace in DynamoRIO requires libipt.
-  if (HAVE_LIBIPT)
+  if(HAVE_LIBIPT)
     add_subdirectory(drpt2trace)
   else()
     message(STATUS "libipt package not installed: not building drpt2trace")
-  endif (HAVE_LIBIPT)
+  endif(HAVE_LIBIPT)
 else()
   message(STATUS "drpt2trace not supported on this platform")
-endif (LINUX AND X86 AND X64)
+endif(LINUX AND X86 AND X64)
 
 set(raw2trace_srcs
   tracer/raw2trace.cpp
@@ -148,25 +151,29 @@ set(raw2trace_srcs
   tracer/instru.cpp
   tracer/instru_online.cpp
   tracer/instru_offline.cpp
-  )
-if (libsnappy)
+)
+
+if(libsnappy)
   set(raw2trace_srcs ${raw2trace_srcs}
     ${snappy_reader}
     reader/reader.cpp
     reader/file_reader.cpp
-    )
-endif ()
+  )
+endif()
+
 add_exported_library(drmemtrace_raw2trace STATIC ${raw2trace_srcs})
 configure_DynamoRIO_standalone(drmemtrace_raw2trace)
 target_link_libraries(drmemtrace_raw2trace directory_iterator drfrontendlib)
 use_DynamoRIO_extension(drmemtrace_raw2trace drutil_static)
 link_with_pthread(drmemtrace_raw2trace)
-if (libsnappy)
+
+if(libsnappy)
   target_link_libraries(drmemtrace_raw2trace snappy)
-endif ()
-if (liblz4)
+endif()
+
+if(liblz4)
   target_link_libraries(drmemtrace_raw2trace lz4)
-endif ()
+endif()
 
 set(drcachesim_srcs
   launcher.cpp
@@ -185,23 +192,29 @@ set(drcachesim_srcs
   common/trace_entry.cpp
   common/CTikz/CTikz.cpp
   common/CTikz/CException.cpp
+
   # We include the invariants analyzer for sanity checks.
   tools/invariant_checker.cpp)
 add_executable(drcachesim ${drcachesim_srcs})
+
 # In order to embed raw2trace we need to be standalone:
 configure_DynamoRIO_standalone(drcachesim)
+
 # Link in our tools:
 target_link_libraries(drcachesim drmemtrace_simulator drmemtrace_reuse_distance
   drmemtrace_histogram drmemtrace_reuse_time drmemtrace_basic_counts
   drmemtrace_opcode_mix drmemtrace_view drmemtrace_func_view
   drmemtrace_raw2trace directory_iterator)
-if (libsnappy)
+
+if(libsnappy)
   target_link_libraries(drcachesim snappy)
-endif ()
+endif()
+
 # To avoid dup symbol errors between drinjectlib and drdecode on Windows we have
 # to explicitly list drdecode up front:
 target_link_libraries(drcachesim drdecode drinjectlib drconfiglib drfrontendlib)
 use_DynamoRIO_extension(drcachesim droption)
+
 # These are also for raw2trace:
 use_DynamoRIO_extension(drcachesim drcovlib_static)
 use_DynamoRIO_extension(drcachesim drutil_static)
@@ -224,12 +237,15 @@ add_exported_library(drmemtrace_analyzer STATIC
   reader/file_reader.cpp
   ${zlib_reader}
   ${snappy_reader}
-  )
+)
 target_link_libraries(drmemtrace_analyzer directory_iterator)
-if (libsnappy)
+
+if(libsnappy)
   target_link_libraries(drmemtrace_analyzer snappy)
-endif ()
+endif()
+
 link_with_pthread(drmemtrace_analyzer)
+
 # We get away w/ exporting the generically-named "utils.h" by putting into a
 # drmemtrace/ subdir.
 install_client_nonDR_header(drmemtrace common/utils.h)
@@ -258,7 +274,7 @@ install_client_nonDR_header(drmemtrace tracer/raw2trace.h)
 add_executable(histogram_launcher
   tools/histogram_launcher.cpp
   tools/invariant_checker.cpp
-  )
+)
 target_link_libraries(histogram_launcher drmemtrace_analyzer drmemtrace_histogram
   drfrontendlib)
 use_DynamoRIO_extension(histogram_launcher droption)
@@ -267,7 +283,7 @@ add_dependencies(histogram_launcher api_headers)
 add_executable(prefetch_analyzer_launcher
   tests/prefetch_analyzer_launcher.cpp
   tests/prefetch_analyzer.cpp
-  )
+)
 target_link_libraries(prefetch_analyzer_launcher drmemtrace_analyzer drfrontendlib)
 use_DynamoRIO_extension(prefetch_analyzer_launcher droption)
 add_dependencies(prefetch_analyzer_launcher api_headers)
@@ -282,10 +298,11 @@ set_property(GLOBAL PROPERTY DynamoRIO_drmemtrace_build_dir
 # We have one more example of a standalone launcher that uses raw2trace to catch
 # link errors (xref i#1409).  We just build it to test the linking; no test.
 # XXX i#1997: static DR is not fully supported on Mac yet.
-if (NOT APPLE)
+if(NOT APPLE)
   add_executable(opcode_mix_launcher
     tools/opcode_mix_launcher.cpp
-    )
+  )
+
   # We hit dup symbol errors on Windows so we need libc earlier before DR:
   _DR_get_static_libc_list(static_libc)
   target_link_libraries(opcode_mix_launcher drmemtrace_analyzer drmemtrace_opcode_mix
@@ -293,24 +310,26 @@ if (NOT APPLE)
   use_DynamoRIO_extension(opcode_mix_launcher droption)
   add_dependencies(opcode_mix_launcher api_headers)
   configure_DynamoRIO_static(opcode_mix_launcher)
-endif ()
+endif()
 
-if (ZLIB_FOUND)
+if(ZLIB_FOUND)
   target_link_libraries(drcachesim ${ZLIB_LIBRARIES})
   target_link_libraries(histogram_launcher ${ZLIB_LIBRARIES})
   target_link_libraries(prefetch_analyzer_launcher ${ZLIB_LIBRARIES})
   target_link_libraries(drmemtrace_raw2trace ${ZLIB_LIBRARIES})
-  if (NOT AARCH64 AND NOT APPLE)
+
+  if(NOT AARCH64 AND NOT APPLE)
     target_link_libraries(opcode_mix_launcher ${ZLIB_LIBRARIES})
-  endif ()
-endif ()
+  endif()
+endif()
 
 macro(add_drmemtrace name type)
-  if (${type} STREQUAL "STATIC")
+  if(${type} STREQUAL "STATIC")
     set(ext_sfx "_static")
-  else ()
+  else()
     set(ext_sfx "")
-  endif ()
+  endif()
+
   set(drmemtrace_srcs
     tracer/tracer.cpp
     tracer/instru.cpp
@@ -319,14 +338,16 @@ macro(add_drmemtrace name type)
     tracer/physaddr.cpp
     tracer/func_trace.cpp
     ${client_and_sim_srcs}
-    )
-  if (libsnappy)
+  )
+
+  if(libsnappy)
     set(drmemtrace_srcs ${drmemtrace_srcs}
       tracer/snappy_file_writer.cpp
       common/snappy_consts.cpp
       common/crc32c.cpp
-      )
-  endif ()
+    )
+  endif()
+
   add_library(${name} ${type} ${drmemtrace_srcs})
   configure_DynamoRIO_client(${name})
   use_DynamoRIO_extension(${name} drmgr${ext_sfx})
@@ -339,15 +360,19 @@ macro(add_drmemtrace name type)
   use_DynamoRIO_extension(${name} droption)
   use_DynamoRIO_extension(${name} drcovlib${ext_sfx})
   use_DynamoRIO_extension(${name} drbbdup${ext_sfx})
-  if (libsnappy)
+
+  if(libsnappy)
     target_link_libraries(${name} snappy)
-  endif ()
-  if (ZLIB_FOUND)
+  endif()
+
+  if(ZLIB_FOUND)
     target_link_libraries(${name} ${ZLIB_LIBRARIES})
-  endif ()
-  if (liblz4)
+  endif()
+
+  if(liblz4)
     target_link_libraries(${name} lz4)
-  endif ()
+  endif()
+
   add_dependencies(${name} api_headers)
   install_target(${name} ${INSTALL_CLIENTS_LIB})
 endmacro()
@@ -355,6 +380,7 @@ endmacro()
 add_drmemtrace(drmemtrace SHARED)
 add_drmemtrace(drmemtrace_static STATIC)
 append_property_list(TARGET drmemtrace_static COMPILE_DEFINITIONS "DRMEMTRACE_STATIC")
+
 # We export drmemtrace.h to the same place as the analysis tool headers
 # for simplicity, rather than sticking it into ext/include or sthg.
 install_client_nonDR_header(drmemtrace tracer/drmemtrace.h)
@@ -363,14 +389,16 @@ add_executable(drraw2trace
   tracer/raw2trace_launcher.cpp
   tracer/instru.cpp
   tracer/instru_online.cpp
-  )
+)
 target_link_libraries(drraw2trace drmemtrace_raw2trace)
+
 # To avoid dup symbol errors on some VS builds we list drdecode before DR:
 target_link_libraries(drraw2trace drdecode)
 configure_DynamoRIO_standalone(drraw2trace)
 target_link_libraries(drraw2trace drfrontendlib)
 use_DynamoRIO_extension(drraw2trace droption)
 use_DynamoRIO_extension(drraw2trace drcovlib_static)
+
 # Because we're leveraging instru_online code we have to link with drutil:
 use_DynamoRIO_extension(drraw2trace drutil_static)
 
@@ -381,25 +409,30 @@ macro(restore_nonclient_flags target)
   # Restore debug and other flags to our non-client executables
   set_target_properties(${target} PROPERTIES
     COMPILE_FLAGS "${ORIG_CMAKE_CXX_FLAGS}")
-  if (NOT DEBUG)
+
+  if(NOT DEBUG)
     append_property_list(TARGET ${target} COMPILE_DEFINITIONS "NDEBUG")
-  endif ()
+  endif()
+
   # However, we need the target os and arch defines (XXX: better way?) for
   # the config, inject, and frontend headers:
   DynamoRIO_extra_defines(extra_defs ON)
   append_property_list(TARGET ${target} COMPILE_DEFINITIONS "${extra_defs}")
-  if (implicit_fallthrough_avail)
+
+  if(implicit_fallthrough_avail)
     append_property_string(TARGET ${target} COMPILE_FLAGS "-Wimplicit-fallthrough")
-  endif ()
+  endif()
 endmacro()
 
 restore_nonclient_flags(drcachesim)
 restore_nonclient_flags(drraw2trace)
 restore_nonclient_flags(histogram_launcher)
 restore_nonclient_flags(prefetch_analyzer_launcher)
-if (NOT AARCH64 AND NOT APPLE)
+
+if(NOT AARCH64 AND NOT APPLE)
   restore_nonclient_flags(opcode_mix_launcher)
-endif ()
+endif()
+
 restore_nonclient_flags(drmemtrace_simulator)
 restore_nonclient_flags(drmemtrace_reuse_distance)
 restore_nonclient_flags(drmemtrace_histogram)
@@ -413,43 +446,48 @@ restore_nonclient_flags(drmemtrace_analyzer)
 # We need to pass /EHsc and we pull in libcmtd into drcachesim from a dep lib.
 # Thus we need to override the /MT with /MTd.
 macro(add_win32_flags target)
-  if (WIN32)
-    if (DEBUG)
+  if(WIN32)
+    if(DEBUG)
       get_property(cur TARGET ${target} PROPERTY COMPILE_FLAGS)
       string(REPLACE "/MT " "" cur "${cur}") # Avoid override warning.
       set_target_properties(${target} PROPERTIES COMPILE_FLAGS "${cur} /EHsc /MTd /Zi")
       append_property_string(TARGET ${target} LINK_FLAGS "/nodefaultlib:libcmt")
-    else ()
+    else()
       append_property_string(TARGET ${target} COMPILE_FLAGS "/EHsc /MT")
-    endif ()
-  else ()
+    endif()
+  else()
     # Work around configure_DynamoRIO_static() clobbering flags by re-adding
     # the important ones for our tests, so they can include our headers
     # with C++11-isms.
     get_property(cur TARGET ${target} PROPERTY COMPILE_FLAGS)
-    if (NOT cur MATCHES "-std=")
+
+    if(NOT cur MATCHES "-std=")
       append_property_string(TARGET ${target} COMPILE_FLAGS "-std=c++11")
-    endif ()
-    if (DEBUG AND NOT cur MATCHES "-g")
+    endif()
+
+    if(DEBUG AND NOT cur MATCHES "-g")
       # We can't use restore_nonclient_flags() for clients, so we manually re-add debug
       # here.
       append_property_string(TARGET ${target} COMPILE_FLAGS "-g")
-    endif ()
-    if (APPLE)
+    endif()
+
+    if(APPLE)
       # Match the core/ flags.
       append_property_string(TARGET ${target} COMPILE_FLAGS "-mmacosx-version-min=10.9")
-    endif ()
-  endif ()
-endmacro ()
+    endif()
+  endif()
+endmacro()
 
 add_win32_flags(drcachesim)
 add_win32_flags(drraw2trace)
 add_win32_flags(histogram_launcher)
 add_win32_flags(prefetch_analyzer_launcher)
 add_win32_flags(drmemtrace_raw2trace)
-if (NOT AARCH64 AND NOT APPLE)
+
+if(NOT AARCH64 AND NOT APPLE)
   add_win32_flags(opcode_mix_launcher)
-endif ()
+endif()
+
 add_win32_flags(drmemtrace_simulator)
 add_win32_flags(drmemtrace_reuse_distance)
 add_win32_flags(drmemtrace_histogram)
@@ -460,55 +498,59 @@ add_win32_flags(drmemtrace_view)
 add_win32_flags(drmemtrace_func_view)
 add_win32_flags(drmemtrace_analyzer)
 add_win32_flags(directory_iterator)
-if (WIN32 AND DEBUG)
+
+if(WIN32 AND DEBUG)
   get_target_property(sim_srcs drcachesim SOURCES)
   get_target_property(raw2trace_srcs drraw2trace SOURCES)
+
   # The client, and our standalone DR users, had /MT added so we need to override.
   # XXX: solve this by avoiding the /MT in the first place!
-  foreach (src ${client_and_sim_srcs} ${sim_srcs} ${raw2trace_srcs} tools/opcode_mix.cpp tools/view.cpp)
+  foreach(src ${client_and_sim_srcs} ${sim_srcs} ${raw2trace_srcs} tools/opcode_mix.cpp tools/view.cpp)
     get_property(cur SOURCE ${src} PROPERTY COMPILE_FLAGS)
     string(REPLACE "/MT " "" cur ${cur}) # Avoid override warning.
     set_source_files_properties(${src} COMPILE_FLAGS "${cur} /MTd")
-  endforeach ()
-endif ()
+  endforeach()
+endif()
 
 place_shared_lib_in_lib_dir(drmemtrace)
 
 add_dependencies(drcachesim api_headers)
 
 # Provide a hint for how to use the client
-if (NOT DynamoRIO_INTERNAL OR NOT "${CMAKE_GENERATOR}" MATCHES "Ninja")
+if(NOT DynamoRIO_INTERNAL OR NOT "${CMAKE_GENERATOR}" MATCHES "Ninja")
   add_custom_command(TARGET drmemtrace
     POST_BUILD
     COMMAND ${CMAKE_COMMAND}
     ARGS -E echo "Usage: pass to drconfig or drrun: -t drcachesim"
     VERBATIM)
-endif ()
+endif()
 
 install_target(drcachesim ${INSTALL_CLIENTS_BIN})
 install_target(drraw2trace ${INSTALL_CLIENTS_BIN})
 
 set(INSTALL_DRCACHESIM_CONFIG ${INSTALL_CLIENTS_BASE})
 
-function (write_config_file dst bindir libdir)
+function(write_config_file dst bindir libdir)
   # We include the alternate-bitwidth path, though it won't be there for
   # a single build dir and such a child will have a fatal error.
-  if (X64)
+  if(X64)
     string(REPLACE "lib64" "lib32" alt_libdir ${libdir})
     set(CUR_BIT "64")
     set(ALT_BIT "32")
-  else ()
+  else()
     set(CUR_BIT "32")
     set(ALT_BIT "64")
     string(REPLACE "lib64" "lib32" alt_libdir ${libdir})
-  endif ()
-  if (DEBUG)
+  endif()
+
+  if(DEBUG)
     set(debugopt "TOOL_OP=-dr_debug")
-  else ()
+  else()
     set(debugopt "")
-  endif ()
+  endif()
+
   file(GENERATE OUTPUT ${dst} CONTENT
-"# drcachesim tool config file\n\
+    "# drcachesim tool config file\n\
 FRONTEND_REL=${bindir}/$<TARGET_FILE_NAME:drcachesim>\n\
 TOOL_OP=-dr\n\
 TOOL_OP_DR_PATH\n\
@@ -518,15 +560,15 @@ CLIENT${CUR_BIT}_REL=${libdir}/${LIB_PFX}drmemtrace${LIB_EXT}\n\
 TOOL_OP=-tracer_alt\n\
 CLIENT${ALT_BIT}_REL=${alt_libdir}/${LIB_PFX}drmemtrace${LIB_EXT}\n\
 ${debugopt}\n")
-endfunction ()
+endfunction()
 
-if (X64)
+if(X64)
   set(CONFIG_INSTALL ${PROJECT_BINARY_DIR}/drcachesim.drrun64)
   set(CONFIG_BUILD ${PROJECT_BINARY_DIR}/tools/drcachesim.drrun64)
-else (X64)
+else(X64)
   set(CONFIG_INSTALL ${PROJECT_BINARY_DIR}/drcachesim.drrun32)
   set(CONFIG_BUILD ${PROJECT_BINARY_DIR}/tools/drcachesim.drrun32)
-endif (X64)
+endif(X64)
 
 set(BUILD_CLIENTS_BIN clients/${INSTALL_BIN})
 set(BUILD_CLIENTS_LIB clients/${INSTALL_LIB})
@@ -537,43 +579,45 @@ write_config_file(${CONFIG_BUILD} ${BUILD_CLIENTS_BIN} ${BUILD_CLIENTS_LIB})
 DR_install(FILES "${CONFIG_INSTALL}" DESTINATION ${INSTALL_DRCACHESIM_CONFIG})
 register_tool_file("drcachesim")
 
-if (WIN32)
+if(WIN32)
   # drcachesim needs these dlls (i#1737 would eliminate this)
   DynamoRIO_get_full_path(injectlib_loc drinjectlib "${location_suffix}")
-  DR_install(FILES "${injectlib_loc}"  DESTINATION "${INSTALL_CLIENTS_BIN}")
+  DR_install(FILES "${injectlib_loc}" DESTINATION "${INSTALL_CLIENTS_BIN}")
   DynamoRIO_get_full_path(configlib_loc drconfiglib "${location_suffix}")
-  DR_install(FILES "${configlib_loc}"  DESTINATION "${INSTALL_CLIENTS_BIN}")
+  DR_install(FILES "${configlib_loc}" DESTINATION "${INSTALL_CLIENTS_BIN}")
   DynamoRIO_get_full_path(drlib_loc dynamorio "${location_suffix}")
-  DR_install(FILES "${drlib_loc}"  DESTINATION "${INSTALL_CLIENTS_BIN}")
+  DR_install(FILES "${drlib_loc}" DESTINATION "${INSTALL_CLIENTS_BIN}")
   add_custom_command(TARGET drcachesim POST_BUILD
     COMMAND ${CMAKE_COMMAND} ARGS -E copy ${DR_LIBRARY_BASE_DIRECTORY}/drinjectlib.dll
     ${PROJECT_BINARY_DIR}/${BUILD_CLIENTS_BIN}/drinjectlib.dll VERBATIM)
   add_custom_command(TARGET drcachesim POST_BUILD
     COMMAND ${CMAKE_COMMAND} ARGS -E copy ${DR_LIBRARY_BASE_DIRECTORY}/drconfiglib.dll
     ${PROJECT_BINARY_DIR}/${BUILD_CLIENTS_BIN}/drconfiglib.dll VERBATIM)
+
   # Avoid dueling racy copies (i#4668).
   add_dependencies(drcachesim client_dr_copy)
-endif ()
+endif()
 
-##################################################
+# #################################################
 # Test executables
 #
 # We build larger executables here.  All tests are added in suite/tests/ except unit tests.
 # Be sure to give the targets qualified test names ("tool.drcache*...").
-
-if (BUILD_TESTS)
+if(BUILD_TESTS)
   add_executable(tool.drcachesim.unit_tests tests/drcachesim_unit_tests.cpp
     tests/cache_replacement_policy_unit_test.cpp)
-  if (ZLIB_FOUND)
+
+  if(ZLIB_FOUND)
     target_link_libraries(tool.drcachesim.unit_tests drmemtrace_simulator
       drmemtrace_static drmemtrace_analyzer ${ZLIB_LIBRARIES})
-  else ()
+  else()
     target_link_libraries(tool.drcachesim.unit_tests drmemtrace_simulator
       drmemtrace_static drmemtrace_analyzer)
-  endif ()
+  endif()
+
   add_win32_flags(tool.drcachesim.unit_tests)
   add_test(NAME tool.drcachesim.unit_tests
-           COMMAND tool.drcachesim.unit_tests)
+    COMMAND tool.drcachesim.unit_tests)
 
   add_executable(tool.drcacheoff.raw2trace_unit_tests tests/raw2trace_unit_tests.cpp)
   configure_DynamoRIO_standalone(tool.drcacheoff.raw2trace_unit_tests)
@@ -584,7 +628,7 @@ if (BUILD_TESTS)
   add_test(NAME tool.drcacheoff.raw2trace_unit_tests
     COMMAND tool.drcacheoff.raw2trace_unit_tests)
 
-  if (DR_HOST_AARCH64)
+  if(DR_HOST_AARCH64)
     add_executable(tool.drcacheoff.burst_aarch64_sys tests/burst_aarch64_sys.cpp)
     configure_DynamoRIO_static(tool.drcacheoff.burst_aarch64_sys)
     use_DynamoRIO_static_client(tool.drcacheoff.burst_aarch64_sys drmemtrace_static)
@@ -592,31 +636,33 @@ if (BUILD_TESTS)
       drmemtrace_analyzer)
     use_DynamoRIO_drmemtrace_tracer(tool.drcacheoff.burst_aarch64_sys)
     add_win32_flags(tool.drcacheoff.burst_aarch64_sys)
-  endif ()
+  endif()
 
   # XXX i#1997: dynamorio_static is not supported on Mac yet
   # FIXME i#2949: gcc 7.3 fails to link certain configs
-  if (NOT APPLE AND NOT DISABLE_FOR_BUG_2949)
+  if(NOT APPLE AND NOT DISABLE_FOR_BUG_2949)
     # Tests for the cache miss analyzer.
     add_executable(tool.drcachesim.miss_analyzer_unit_test tests/cache_miss_analyzer_test.cpp)
-    if (ZLIB_FOUND)
+
+    if(ZLIB_FOUND)
       target_link_libraries(tool.drcachesim.miss_analyzer_unit_test drmemtrace_simulator
         drmemtrace_static drmemtrace_analyzer ${ZLIB_LIBRARIES})
-    else ()
+    else()
       target_link_libraries(tool.drcachesim.miss_analyzer_unit_test drmemtrace_simulator
         drmemtrace_static drmemtrace_analyzer)
-    endif ()
+    endif()
+
     add_win32_flags(tool.drcachesim.miss_analyzer_unit_test)
     add_test(NAME tool.drcachesim.miss_analyzer_unit_test
-             COMMAND tool.drcachesim.miss_analyzer_unit_test)
+      COMMAND tool.drcachesim.miss_analyzer_unit_test)
 
     add_executable(tool.drcachesim.invariant_checker_test
       tools/invariant_checker.cpp tests/invariant_checker_test.cpp)
     target_link_libraries(tool.drcachesim.invariant_checker_test
-        drmemtrace_static drmemtrace_analyzer)
+      drmemtrace_static drmemtrace_analyzer)
     add_win32_flags(tool.drcachesim.invariant_checker_test)
     add_test(NAME tool.drcachesim.invariant_checker_test
-             COMMAND tool.drcachesim.invariant_checker_test)
+      COMMAND tool.drcachesim.invariant_checker_test)
 
     add_executable(tool.drcacheoff.view_test tests/view_test.cpp)
     configure_DynamoRIO_standalone(tool.drcacheoff.view_test)
@@ -637,11 +683,13 @@ if (BUILD_TESTS)
     configure_DynamoRIO_static(tool.drcacheoff.burst_replace)
     use_DynamoRIO_static_client(tool.drcacheoff.burst_replace drmemtrace_static)
     target_link_libraries(tool.drcacheoff.burst_replace drmemtrace_raw2trace)
-    if (WIN32)
+
+    if(WIN32)
       # burst_replace is unusual in cramming the tracer and post-processor into the
       # same binary and we need some massaging to avoid duplicate symbol link errors.
       target_link_libraries(tool.drcacheoff.burst_replace ${static_libc})
-    endif ()
+    endif()
+
     add_win32_flags(tool.drcacheoff.burst_replace)
     use_DynamoRIO_drmemtrace_tracer(tool.drcacheoff.burst_replace)
     use_DynamoRIO_extension(tool.drcacheoff.burst_replace drcovlib_static)
@@ -657,11 +705,13 @@ if (BUILD_TESTS)
     configure_DynamoRIO_static(tool.drcacheoff.burst_malloc)
     use_DynamoRIO_static_client(tool.drcacheoff.burst_malloc drmemtrace_static)
     add_win32_flags(tool.drcacheoff.burst_malloc)
-    if (UNIX)
+
+    if(UNIX)
       append_property_string(SOURCE tests/burst_malloc.cpp
+
         # Allow our different-arg-count aliases.
         COMPILE_FLAGS "-Wno-attribute-alias")
-    endif ()
+    endif()
 
     add_executable(tool.drcacheoff.burst_reattach tests/burst_reattach.cpp)
     configure_DynamoRIO_static(tool.drcacheoff.burst_reattach)
@@ -680,21 +730,22 @@ if (BUILD_TESTS)
     add_win32_flags(tool.drcacheoff.burst_threadfilter)
     link_with_pthread(tool.drcacheoff.burst_threadfilter)
 
-    if (X64 AND UNIX)
+    if(X64 AND UNIX)
       add_executable(tool.drcacheoff.burst_noreach tests/burst_noreach.cpp)
       configure_DynamoRIO_static(tool.drcacheoff.burst_noreach)
       use_DynamoRIO_static_client(tool.drcacheoff.burst_noreach drmemtrace_static)
       add_win32_flags(tool.drcacheoff.burst_noreach)
-    endif ()
-    if (LINUX) # Uses mremap.
+    endif()
+
+    if(LINUX) # Uses mremap.
       add_executable(tool.drcacheoff.burst_maps tests/burst_maps.cpp)
       configure_DynamoRIO_static(tool.drcacheoff.burst_maps)
       use_DynamoRIO_static_client(tool.drcacheoff.burst_maps drmemtrace_static)
       add_win32_flags(tool.drcacheoff.burst_maps)
-    endif ()
+    endif()
 
-    if (UNIX)
-      if (X86 AND NOT APPLE) # This test is x86-specific.
+    if(UNIX)
+      if(X86 AND NOT APPLE) # This test is x86-specific.
         # uses ptrace and looks for linux-specific syscalls
         add_executable(tool.drcacheoff.raw2trace_io tests/raw2trace_io.cpp
           tracer/instru.cpp
@@ -705,9 +756,10 @@ if (BUILD_TESTS)
         use_DynamoRIO_extension(tool.drcacheoff.raw2trace_io droption)
         target_link_libraries(tool.drcacheoff.raw2trace_io drdecode)
         use_DynamoRIO_extension(tool.drcacheoff.raw2trace_io drcovlib_static)
+
         # Because we're leveraging instru_online code we have to link with drutil:
         use_DynamoRIO_extension(tool.drcacheoff.raw2trace_io drutil_static)
-      endif ()
+      endif()
 
       # FIXME i#2099: the weak symbol is not supported on Windows.
       add_executable(tool.drcacheoff.burst_client tests/burst_static.cpp)
@@ -715,9 +767,10 @@ if (BUILD_TESTS)
         COMPILE_DEFINITIONS "TEST_APP_DR_CLIENT_MAIN")
       configure_DynamoRIO_static(tool.drcacheoff.burst_client)
       use_DynamoRIO_static_client(tool.drcacheoff.burst_client drmemtrace_static)
+
       # A nop, keep it for the future Windows support.
       add_win32_flags(tool.drcacheoff.burst_client)
-    endif ()
+    endif()
 
     set(source_abs "${CMAKE_CURRENT_SOURCE_DIR}/tests/burst_traceopts.cpp")
     set(asm_deps
@@ -728,27 +781,31 @@ if (BUILD_TESTS)
       "_asm" "" "${asm_deps}")
     add_executable(tool.drcacheoff.burst_traceopts ${source_abs}
       ${asm_source}
+
       # This test includes related unit tests for classes used for trace opts.
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/reg_id_set_unit_tests.cpp")
     configure_DynamoRIO_static(tool.drcacheoff.burst_traceopts)
-    if ("${CMAKE_GENERATOR}" MATCHES "Visual Studio")
+
+    if("${CMAKE_GENERATOR}" MATCHES "Visual Studio")
       add_dependencies(tool.drcacheoff.burst_traceopts ${gen_asm_tgt})
-    endif ()
+    endif()
+
     use_DynamoRIO_static_client(tool.drcacheoff.burst_traceopts drmemtrace_static)
     target_link_libraries(tool.drcacheoff.burst_traceopts drmemtrace_raw2trace
       drmemtrace_analyzer)
-    if (WIN32)
+
+    if(WIN32)
       # Just like for burst_replace, linking everything together takes effort.
       target_link_libraries(tool.drcacheoff.burst_traceopts ${static_libc})
-    endif ()
+    endif()
+
     add_win32_flags(tool.drcacheoff.burst_traceopts)
     use_DynamoRIO_drmemtrace_tracer(tool.drcacheoff.burst_traceopts)
     use_DynamoRIO_extension(tool.drcacheoff.burst_traceopts drcovlib_static)
+  endif()
+endif()
 
-  endif ()
-endif ()
-
-##################################################
+# #################################################
 # Documentation
 
 # We auto-generate the list of options in the html docs via this helper app.
@@ -780,10 +837,10 @@ add_custom_command(
   common/options.h
   COMMAND ${CMAKE_COMMAND}
   ARGS -D src=${srcdoc}
-       -D dst=${gendoc}
-       -D CMAKE_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
-       -D prog=$<TARGET_FILE:drcachesim_ops>
-       -P ${CMAKE_CURRENT_SOURCE_DIR}/../common/gendocs.cmake
+  -D dst=${gendoc}
+  -D CMAKE_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
+  -D prog=$<TARGET_FILE:drcachesim_ops>
+  -P ${CMAKE_CURRENT_SOURCE_DIR}/../common/gendocs.cmake
   VERBATIM)
 
 # propagate to parent dir
