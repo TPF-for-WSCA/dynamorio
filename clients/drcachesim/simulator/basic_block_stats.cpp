@@ -96,7 +96,7 @@ set_accessed(uint64_t mask, uint8_t lower, uint8_t upper)
 }
 
 uint64_t
-get_total_mask_for_presence(const std::vector<uint64_t> &masks) __attribute_pure__
+get_total_mask_for_presence(const std::vector<uint64_t> &masks)
     __attribute__((const));
 
 uint64_t
@@ -110,7 +110,7 @@ get_total_mask_for_presence(const std::vector<uint64_t> &masks)
 }
 
 uint8_t
-get_total_access_from_masks(const std::vector<uint64_t> &masks) __attribute_pure__
+get_total_access_from_masks(const std::vector<uint64_t> &masks)
     __attribute__((const));
 
 uint8_t
