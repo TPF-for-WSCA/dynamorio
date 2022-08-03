@@ -887,7 +887,7 @@ basic_block_stats_t::print_bytes_accessed()
     } else {
         holes_in_cachelines_csv << "SIZE OF HOLES IN CACHELINES\n";
         for (size_t i = 0; i < holes.size(); i++) {
-            holes_in_cachelines_csv << holes[i] << "\n";
+            holes_in_cachelines_csv << (int)holes[i] << "\n";
         }
         holes_in_cachelines_csv.flush();
         holes_in_cachelines_csv.close();
@@ -898,9 +898,10 @@ basic_block_stats_t::print_bytes_accessed()
     //     std::endl;
     // }
 
-    std::ofstream chaeline_load_counts;
-    chaeline_load_counts.open((output_dir + "/cacheline_load_counts.csv"), std::ios::out);
-    if (!chaeline_load_counts) {
+    std::ofstream cacheline_load_counts;
+    cacheline_load_counts.open((output_dir + "/cacheline_load_counts.csv"),
+                               std::ios::out);
+    if (!cacheline_load_counts) {
         std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
                   << "/cacheline_load_counts.csv\n";
 
@@ -909,13 +910,13 @@ basic_block_stats_t::print_bytes_accessed()
             std::cout << loads << ": " << count << "\n";
         }
     } else {
-        chaeline_load_counts << "sep=;\n";
-        chaeline_load_counts << "#LOADS;#CACHELINES\n";
+        cacheline_load_counts << "sep=;\n";
+        cacheline_load_counts << "#LOADS;#CACHELINES\n";
         for (auto const &[loads, count] : distribution_of_presences) {
-            chaeline_load_counts << loads << ";" << count << "\n";
+            cacheline_load_counts << loads << ";" << count << "\n";
         }
-        chaeline_load_counts.flush();
-        chaeline_load_counts.close();
+        cacheline_load_counts.flush();
+        cacheline_load_counts.close();
     }
 
     std::ofstream access_count_to_cl_of_size;
