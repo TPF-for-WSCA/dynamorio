@@ -885,12 +885,12 @@ basic_block_stats_t::print_bytes_accessed()
             std::cout << holes[i] << "\n";
         }
     } else {
-        distinct_cachelines_csv << "SIZE OF HOLES IN CACHELINES\n";
+        holes_in_cachelines_csv << "SIZE OF HOLES IN CACHELINES\n";
         for (size_t i = 0; i < holes.size(); i++) {
-            distinct_cachelines_csv << holes[i] << "\n";
+            holes_in_cachelines_csv << holes[i] << "\n";
         }
-        distinct_cachelines_csv.flush();
-        distinct_cachelines_csv.close();
+        holes_in_cachelines_csv.flush();
+        holes_in_cachelines_csv.close();
     }
 
     // for (size_t i = 0; i < count_accessed_bytes_per_cacheline.size(); i++) {
