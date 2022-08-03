@@ -95,15 +95,54 @@ set_accessed(uint64_t mask, uint8_t lower, uint8_t upper)
     return mask;
 }
 
-uint8_t
-get_total_access_from_masks(const std::vector<uint64_t> &masks)
+uint64_t
+get_total_mask_for_presence(const std::vector<uint64_t> &masks) __attribute_pure__
+    __attribute__((const));
+
+uint64_t
+get_total_mask_for_presence(const std::vector<uint64_t> &masks)
 {
     uint64_t current_mask = 0;
     for (auto const &mask : masks) {
         current_mask |= mask;
     }
-    return (uint8_t)__builtin_popcountll(current_mask);
+    return current_mask;
 }
+
+uint8_t
+get_total_access_from_masks(const std::vector<uint64_t> &masks) __attribute_pure__
+    __attribute__((const));
+
+uint8_t
+get_total_access_from_masks(const std::vector<uint64_t> &masks)
+{
+    return (uint8_t)__builtin_popcountll(get_total_mask_for_presence(masks));
+}
+
+std::vector<uint8_t>
+count_holes_in_masks(const uint64_t &mask) __attribute_const__ __attribute_pure__;
+std::vector<uint8_t>
+count_holes_in_masks(const uint64_t &mask)
+{
+    std::vector<uint8_t> holes;
+    int8_t prev_bit = -1;
+    uint8_t count_size = 0;
+    for (int byte = 0; byte < 64; byte++) {
+        uint8_t current_bit = ((mask >> byte) & 0x1);
+        if (current_bit == 0 && prev_bit >= 0) {
+            count_size += 1;
+            prev_bit = current_bit;
+        } else if (current_bit == 1 && prev_bit == 0) {
+            holes.push_back(count_size);
+            count_size = 0;
+            prev_bit = current_bit;
+        } else if (current_bit == 1 && prev_bit == -1) {
+            prev_bit = current_bit;
+        }
+    }
+    return holes;
+}
+
 /**
  * @brief assert with a message
  *
@@ -774,6 +813,7 @@ basic_block_stats_t::print_bytes_accessed()
     //    std::vector<double> count_accessed_bytes_per_cacheline(65, 0.0);
     std::vector<uint64_t> access_sizes_to_cache(64, 0);
     std::vector<uint64_t> num_lines_with_accesses_of_size(64, 0);
+    std::vector<uint8_t> holes;
     // TODO: Replace by parallel foreach loops
     for (auto const &[cacheline_baseaddress, accesses_per_presence] :
          bytes_accessed_per_presence_per_cacheline) {
@@ -784,6 +824,10 @@ basic_block_stats_t::print_bytes_accessed()
         distribution_of_presences[accesses_per_presence.size()] += 1;
         for (auto const &accesses : accesses_per_presence) {
             uint8_t total_accessed_bytes = get_total_access_from_masks(accesses);
+            auto curr_presence_holes =
+                count_holes_in_masks(get_total_mask_for_presence(accesses));
+            holes.insert(holes.end(), curr_presence_holes.begin(),
+                         curr_presence_holes.end());
             distinct_cachelines_by_size[total_accessed_bytes].insert(
                 cacheline_baseaddress);
             //            count_accessed_bytes_per_cacheline[total_accessed_bytes]++;
@@ -830,8 +874,28 @@ basic_block_stats_t::print_bytes_accessed()
         distinct_cachelines_csv.close();
     }
 
+    std::ofstream holes_in_cachelines_csv;
+    holes_in_cachelines_csv.open((output_dir + "/holes_in_cachelines.csv"),
+                                 std::ios::out);
+    if (!holes_in_cachelines_csv) {
+        std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
+                  << "/holes_in_cachelines.csv\n";
+        std::cout << "==== SIZE OF HOLES IN CACHELINES ====\n";
+        for (size_t i = 0; i < holes.size(); i++) {
+            std::cout << holes[i] << "\n";
+        }
+    } else {
+        distinct_cachelines_csv << "SIZE OF HOLES IN CACHELINES\n";
+        for (size_t i = 0; i < holes.size(); i++) {
+            distinct_cachelines_csv << holes[i] << "\n";
+        }
+        distinct_cachelines_csv.flush();
+        distinct_cachelines_csv.close();
+    }
+
     // for (size_t i = 0; i < count_accessed_bytes_per_cacheline.size(); i++) {
-    //     std::cout << i << ": " << count_accessed_bytes_per_cacheline[i] << std::endl;
+    //     std::cout << i << ": " << count_accessed_bytes_per_cacheline[i] <<
+    //     std::endl;
     // }
 
     std::ofstream chaeline_load_counts;
