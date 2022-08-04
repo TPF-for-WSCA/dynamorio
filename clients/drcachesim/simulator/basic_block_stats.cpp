@@ -111,9 +111,7 @@ get_total_access_from_masks(const std::vector<uint64_t> &masks)
     return (uint8_t)__builtin_popcountll(get_total_mask_for_presence(masks));
 }
 
-std::vector<uint8_t>
-count_holes_in_masks(const uint64_t &mask) __attribute_const__ __attribute_pure__;
-std::vector<uint8_t>
+std::vector<int>
 count_holes_in_masks(const uint64_t &mask)
 {
     std::vector<uint8_t> holes;
@@ -805,7 +803,7 @@ basic_block_stats_t::print_bytes_accessed()
     //    std::vector<double> count_accessed_bytes_per_cacheline(65, 0.0);
     std::vector<uint64_t> access_sizes_to_cache(64, 0);
     std::vector<uint64_t> num_lines_with_accesses_of_size(64, 0);
-    std::vector<uint8_t> holes;
+    std::vector<int> holes;
     // TODO: Replace by parallel foreach loops
     for (auto const &[cacheline_baseaddress, accesses_per_presence] :
          bytes_accessed_per_presence_per_cacheline) {
