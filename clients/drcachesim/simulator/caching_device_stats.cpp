@@ -216,14 +216,15 @@ caching_device_stats_t::print_child_stats(std::string prefix)
 void
 caching_device_stats_t::print_stats(std::string prefix)
 {
-    std::cerr.imbue(std::locale("")); // Add commas, at least for my locale
+    // The whole locale thing fcks up execution on the cluster
+    // std::cerr.imbue(std::locale("")); // Add commas, at least for my locale
     if (warmup_enabled_) {
         print_warmup(prefix);
     }
     print_counts(prefix);
     print_rates(prefix);
     print_child_stats(prefix);
-    std::cerr.imbue(std::locale("C")); // Reset to avoid affecting later prints.
+    // std::cerr.imbue(std::locale("C")); // Reset to avoid affecting later prints.
 }
 
 void

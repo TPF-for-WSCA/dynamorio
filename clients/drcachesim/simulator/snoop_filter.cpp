@@ -126,7 +126,7 @@ snoop_filter_t::snoop_eviction(addr_t tag, int id)
 void
 snoop_filter_t::print_stats(void)
 {
-    std::cerr.imbue(std::locale("")); // Add commas, at least for my locale.
+    // std::cerr.imbue(std::locale("")); // Add commas, at least for my locale.
     std::string prefix = "    ";
     std::cerr << "Coherence stats:" << std::endl;
     std::cerr << prefix << std::setw(18) << std::left << "Total writes:" << std::setw(20)
@@ -135,5 +135,5 @@ snoop_filter_t::print_stats(void)
               << std::right << num_invalidates_ << std::endl;
     std::cerr << prefix << std::setw(18) << std::left << "Writebacks:" << std::setw(20)
               << std::right << num_writebacks_ << std::endl;
-    std::cerr.imbue(std::locale("C")); // Reset to avoid affecting later prints.
+    // std::cerr.imbue(std::locale("C")); // Reset to avoid affecting later prints.
 }
