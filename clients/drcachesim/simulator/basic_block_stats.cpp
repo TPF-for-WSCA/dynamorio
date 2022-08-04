@@ -114,11 +114,11 @@ get_total_access_from_masks(const std::vector<uint64_t> &masks)
 std::vector<int>
 count_holes_in_masks(const uint64_t &mask)
 {
-    std::vector<uint8_t> holes;
+    std::vector<int> holes;
     int8_t prev_bit = -1;
     uint8_t count_size = 0;
     for (int byte = 0; byte < 64; byte++) {
-        uint8_t current_bit = ((mask >> byte) & 0x1);
+        int current_bit = ((mask >> byte) & 0x1);
         if (current_bit == 0 && prev_bit >= 0) {
             count_size += 1;
             prev_bit = current_bit;
