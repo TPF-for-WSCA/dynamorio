@@ -124,7 +124,7 @@ std::vector<int>
 count_holes_in_masks(const uint64_t &mask)
 {
     std::vector<int> holes;
-    int8_t prev_bit;
+    uint8_t prev_bit = 0;
     uint8_t count_hole_size = 0;
     uint8_t count_block_size = 0;
     bool trailing = true;
@@ -853,7 +853,7 @@ basic_block_stats_t::print_bytes_accessed()
                 count_holes_in_masks(get_total_mask_for_presence(accesses));
             int num_holes = curr_presence_holes.size() / 2;
             holes[num_holes] += 1;
-            for (int i = 1; i < curr_presence_holes.size(); i += 2) {
+            for (size_t i = 1; i < curr_presence_holes.size(); i += 2) {
                 int curr_hole_size = curr_presence_holes[i];
                 hole_sizes_and_relative.push_back(
                     std::pair(curr_hole_size,
