@@ -111,24 +111,57 @@ get_total_access_from_masks(const std::vector<uint64_t> &masks)
     return (uint8_t)__builtin_popcountll(get_total_mask_for_presence(masks));
 }
 
+/**
+ * @brief Parses a bit mask to detect holes and blocks in a cacheline
+ *
+ * @param the mask of the cacheline under test
+ * @return std::vector<int> A vector containing B H B H B sizes (Block and hole sizes),
+ * where it alwazs needs to return an odd number of entries, as it alwazs has to start
+ * and end with a block and in between tw blcks there is always exclusively one single
+ * hole.
+ */
 std::vector<int>
 count_holes_in_masks(const uint64_t &mask)
 {
-    std::vector<uint8_t> holes;
-    int8_t prev_bit = -1;
-    uint8_t count_size = 0;
+    std::vector<int> holes;
+    int8_t prev_bit;
+    uint8_t count_hole_size = 0;
+    uint8_t count_block_size = 0;
+    bool trailing = true;
     for (int byte = 0; byte < 64; byte++) {
         uint8_t current_bit = ((mask >> byte) & 0x1);
-        if (current_bit == 0 && prev_bit >= 0) {
-            count_size += 1;
+        if (current_bit == 1 && trailing) {
+            trailing = false;
             prev_bit = current_bit;
-        } else if (current_bit == 1 && prev_bit == 0) {
-            holes.push_back(count_size);
-            count_size = 0;
-            prev_bit = current_bit;
-        } else if (current_bit == 1 && prev_bit == -1) {
-            prev_bit = current_bit;
+            count_block_size = 1;
+            continue;
+        } else if (current_bit == 0 && trailing) {
+            continue;
         }
+
+        // posedge/negedge kind of analysis
+        if (current_bit == 0 && prev_bit == 1) {
+            holes.push_back(count_block_size);
+            count_block_size = 0;
+        } else if (current_bit == 1 && prev_bit == 0) {
+            holes.push_back(count_hole_size);
+            count_hole_size = 0;
+        }
+
+        if (current_bit == 0) {
+            count_hole_size += 1;
+        } else {
+            count_block_size += 1;
+        }
+        prev_bit = current_bit;
+    }
+
+    if (prev_bit == 1 && count_block_size > 0) {
+        holes.push_back(count_block_size);
+    }
+
+    if (holes.size() % 2 != 1) {
+        std::cout << "WHAT IS WRONG WITH YOU???" << std::endl;
     }
     return holes;
 }
@@ -803,7 +836,9 @@ basic_block_stats_t::print_bytes_accessed()
     //    std::vector<double> count_accessed_bytes_per_cacheline(65, 0.0);
     std::vector<uint64_t> access_sizes_to_cache(64, 0);
     std::vector<uint64_t> num_lines_with_accesses_of_size(64, 0);
-    std::vector<int> holes;
+    std::vector<int> holes(64);
+    std::vector<std::pair<int, double>>
+        hole_sizes_and_relative; // (hole size, relative part of the local block (B H B))
     // TODO: Replace by parallel foreach loops
     for (auto const &[cacheline_baseaddress, accesses_per_presence] :
          bytes_accessed_per_presence_per_cacheline) {
@@ -816,8 +851,16 @@ basic_block_stats_t::print_bytes_accessed()
             uint8_t total_accessed_bytes = get_total_access_from_masks(accesses);
             auto curr_presence_holes =
                 count_holes_in_masks(get_total_mask_for_presence(accesses));
-            holes.insert(holes.end(), curr_presence_holes.begin(),
-                         curr_presence_holes.end());
+            int num_holes = curr_presence_holes.size() / 2;
+            holes[num_holes] += 1;
+            for (int i = 1; i < curr_presence_holes.size(); i += 2) {
+                int curr_hole_size = curr_presence_holes[i];
+                hole_sizes_and_relative.push_back(
+                    std::pair(curr_hole_size,
+                              (double)curr_hole_size /
+                                  (curr_presence_holes[i - 1] +
+                                   curr_presence_holes[i + 1] + curr_hole_size)));
+            }
             distinct_cachelines_by_size[total_accessed_bytes].insert(
                 cacheline_baseaddress);
             //            count_accessed_bytes_per_cacheline[total_accessed_bytes]++;
@@ -865,22 +908,44 @@ basic_block_stats_t::print_bytes_accessed()
     }
 
     std::ofstream holes_in_cachelines_csv;
+    std::ofstream num_cl_with_num_holes_csv;
     holes_in_cachelines_csv.open((output_dir + "/holes_in_cachelines.csv"),
                                  std::ios::out);
-    if (!holes_in_cachelines_csv) {
+    num_cl_with_num_holes_csv.open(
+        (output_dir + "/number_of_cachelines_with_number_of_holes.csv"), std::ios::out);
+
+    if (!holes_in_cachelines_csv || !num_cl_with_num_holes_csv) {
+        std::stringstream holes_in_cachelines;
+        std::stringstream num_cl_with_num_holes;
         std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
-                  << "/holes_in_cachelines.csv\n";
-        std::cout << "==== SIZE OF HOLES IN CACHELINES ====\n";
+                  << "/holes_in_cachelines.csv v "
+                     "number_of_cachelines_with_number_of_holes.csv\n";
         for (size_t i = 0; i < holes.size(); i++) {
-            std::cout << holes[i] << "\n";
+            num_cl_with_num_holes << i << ";" << holes[i] << "\n";
         }
+        for (const auto &hole_information : hole_sizes_and_relative) {
+            holes_in_cachelines << hole_information.first << "; "
+                                << hole_information.second << "\n";
+        }
+        std::cout << "==== SIZE OF HOLES IN CACHELINES ====\n";
+        std::cout << holes_in_cachelines.rdbuf();
+        std::cout << "==== #CACHELINES WITH #HOLES ====\n";
+        std::cout << num_cl_with_num_holes.rdbuf();
+        std::cout << std::flush;
     } else {
-        holes_in_cachelines_csv << "SIZE OF HOLES IN CACHELINES\n";
+        holes_in_cachelines_csv
+            << "SIZE OF HOLES IN CACHELINES;RELATIVE CONTRIBUTION TO LOCAL BLOCK\n";
         for (size_t i = 0; i < holes.size(); i++) {
-            holes_in_cachelines_csv << (int)holes[i] << "\n";
+            num_cl_with_num_holes_csv << i << ";" << holes[i] << "\n";
+        }
+        for (const auto &hole_information : hole_sizes_and_relative) {
+            holes_in_cachelines_csv << hole_information.first << "; "
+                                    << hole_information.second << "\n";
         }
         holes_in_cachelines_csv.flush();
         holes_in_cachelines_csv.close();
+        num_cl_with_num_holes_csv.flush();
+        num_cl_with_num_holes_csv.close();
     }
 
     // for (size_t i = 0; i < count_accessed_bytes_per_cacheline.size(); i++) {
