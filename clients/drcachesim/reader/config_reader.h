@@ -88,6 +88,9 @@ struct cache_params_t {
     std::string prefetcher;
     // Name of the file to use to dump cache misses info.
     std::string miss_file;
+
+    // For VCL Caches: the different line sizes for this particular cache - sorted by size
+    std::vector<int> line_sizes;
 };
 
 class config_reader_t {
@@ -109,11 +112,12 @@ private:
     bool
     is_true(std::string bool_val)
     {
-        if (bool_val == "true" || bool_val == "True" || bool_val == "TRUE") {
-            return true;
-        }
-        return false;
+        return (bool_val == "true" || bool_val == "True" || bool_val == "TRUE");
     }
+
+    template <typename T>
+    bool
+    handle_int_config_list(std::vector<T> &settings_container);
 };
 
 #endif /* _CONFIG_READER_H_ */

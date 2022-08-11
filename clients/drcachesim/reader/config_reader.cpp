@@ -170,6 +170,38 @@ config_reader_t::configure(std::istream *config_file, cache_simulator_knobs_t &k
     return check_cache_config(knobs.num_cores, caches);
 }
 
+template <typename T>
+bool
+config_reader_t::handle_int_config_list(std::vector<T> &settings_container)
+{
+    char c;
+    if (!(*fin_ >> ws >> c)) {
+        ERRMSG("Unable to read from the configuration file\n");
+        return false;
+    }
+
+    if (c != '[') {
+        ERRMSG("Expected '[' before variable cacheline size params\n");
+        return false;
+    }
+    while (!fin_->eof()) {
+        T val;
+        // TODO: solve peek not seeint ]
+        char next = fin_->peek();
+        if (next == ']') {
+            fin_->ignore();
+            return true;
+        } else if (next == ',' || next == '\n') {
+            fin_->ignore();
+            continue;
+        } else {
+            (*fin_) >> val;
+        }
+        settings_container.push_back(val);
+    }
+    return false;
+}
+
 bool
 config_reader_t::configure_cache(cache_params_t &cache)
 {
@@ -219,6 +251,11 @@ config_reader_t::configure_cache(cache_params_t &cache)
             if (!(*fin_ >> cache.core)) {
                 ERRMSG("Error reading cache core from "
                        "the configuration file\n");
+                return false;
+            }
+        } else if (param == "line_sizes") {
+            if (!handle_int_config_list<int>(cache.line_sizes)) {
+                ERRMSG("Error parsing line sizes list for VCL cache.\n");
                 return false;
             }
         } else if (param == "size") {

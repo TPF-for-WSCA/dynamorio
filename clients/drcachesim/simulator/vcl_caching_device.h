@@ -1,12 +1,13 @@
 #ifndef _VCL_CACHING_DEVICE_H_
-#    define _VCL_CACHING_DEVICE_H_
+#define _VCL_CACHING_DEVICE_H_
 
-#    include "caching_device.h"
+#include "caching_device.h"
+#include "vcl_caching_device_block.h"
 
 class vcl_caching_device_t : public caching_device_t {
 
 public:
-    vcl_caching_device_t();
+    vcl_caching_device_t() override;
     virtual bool
     init(int associativity, std::vector<int> &way_sizes, int num_blocks,
          caching_device_t *parent, caching_device_stats_t *stats,
@@ -14,48 +15,48 @@ public:
          bool coherent_cache = false, int id_ = -1,
          snoop_filter_t *snoop_filter_ = nullptr,
          const std::vector<caching_device_t *> &children = {});
-    virtual ~vcl_caching_device_t();
+    virtual ~vcl_caching_device_t() override;
     virtual void
-    request(const memref_t &memref);
+    request(const memref_t &memref) override;
     virtual void
-    invalidate(addr_t tag, invalidation_type_t invalidation_type_);
+    invalidate(addr_t tag, invalidation_type_t invalidation_type_) override;
     bool
-    contains_tag(addr_t tag);
+    contains_tag(addr_t tag) override;
     void
-    propagate_eviction(addr_t tag, const caching_device_t *requester);
+    propagate_eviction(addr_t tag, const caching_device_t *requester) override;
     void
-    propagate_write(addr_t tag, const caching_device_t *requester);
+    propagate_write(addr_t tag, const caching_device_t *requester) override;
 
     caching_device_stats_t *
-    get_stats() const
+    get_stats() const override
     {
         return stats_;
     }
 
     void
-    set_stats(caching_device_stats_t *stats)
+    set_stats(caching_device_stats_t *stats) override
     {
         stats_ = stats;
     }
 
     prefetcher_t *
-    get_prefetcher() const
+    get_prefetcher() const override
     {
         return prefetcher_;
     }
     caching_device_t *
-    get_parent() const
+    get_parent() const override
     {
         return parent_;
     }
     inline double
-    get_loaded_fraction() const
+    get_loaded_fraction() const override
     {
         return double(loaded_blocks_) / num_blocks_;
     }
     // Must be called prior to any call to request().
     virtual inline void
-    set_hashtable_use(bool use_hashtable)
+    set_hashtable_use(bool use_hashtable) override
     {
         if (!use_tag2block_table_ && use_hashtable) {
             // Resizing from an initial small table causes noticeable overhead, so we
@@ -68,7 +69,7 @@ public:
         use_tag2block_table_ = use_hashtable;
     }
     int
-    get_block_index(const addr_t addr) const
+    get_block_index(const addr_t addr) const override
     {
         addr_t tag = compute_tag(addr);
         int block_idx = compute_block_idx(tag);
@@ -77,39 +78,39 @@ public:
 
 protected:
     virtual void
-    access_update(int block_idx, int way);
+    access_update(int block_idx, int way) override;
     virtual int
-    replace_which_way(int block_idx);
+    replace_which_way(int block_idx) override;
     virtual int
-    get_next_way_to_replace(const int block_idx) const;
+    get_next_way_to_replace(const int block_idx) const override;
     virtual void
     record_access_stats(const memref_t &memref, bool hit,
-                        caching_device_block_t *cache_block);
+                        caching_device_block_t *cache_block) override;
 
     inline addr_t
-    compute_tag(addr_t addr) const
+    compute_tag(addr_t addr) const override
     {
-        // TODO:
+        // look up next branch
     }
     inline int
-    compute_block_idx(addr_t tag) const
+    compute_block_idx(addr_t tag) const override
     {
         // TODO:;
     }
     inline caching_device_block_t &
-    get_caching_device_block(int block_idx, int way) const
+    get_caching_device_block(int block_idx, int way) const override
     {
         // TODO;
     }
 
     inline void
-    invalidate_caching_device_block(caching_device_block_t *block)
+    invalidate_caching_device_block(caching_device_block_t *block) override
     {
         // TODO
     }
 
     inline void
-    update_tag(caching_device_block_t *block, int way, addr_t new_tag)
+    update_tag(caching_device_block_t *block, int way, addr_t new_tag) override
     {
         // TODO
     }
@@ -117,14 +118,15 @@ protected:
     // Returns the block (and its way) whose tag equals `tag`.
     // Returns <nullptr,0> if there is no such block.
     std::pair<caching_device_block_t *, int>
-    find_caching_device_block(addr_t tag);
+    find_caching_device_block(addr_t tag) override;
 
     // a pure virtual function for subclasses to initialize their own block array
     virtual void
     init_blocks() = 0;
 
     int associativity_;
-    int block_size_;
+    // len of block_sizes_ needs to be equal associativity
+    std::vector<int> block_sizes_;
     int num_blocks_;
     bool coherent_cache_;
     // This is an index into snoop filter's array of caches.
@@ -146,10 +148,11 @@ protected:
     // an extended block class which has its own member variables cannot be indexed
     // correctly by base class pointers.
     caching_device_block_t **blocks_;
-    int blocks_per_set_;
+    int sets_in_cache_;
     // Optimization fields for fast bit operations
     int blocks_per_set_mask_;
     int assoc_bits_;
+    std::vector<int> block_sizes_bits_;
     int block_size_bits_;
 
     caching_device_stats_t *stats_;
@@ -170,4 +173,4 @@ protected:
         tag2block;
     bool use_tag2block_table_ = false;
 };
-#endif /* _VCL_CACHING_DEVICE_H */
+#endif /* _VCL_CACHING_DEVICE_H_ */

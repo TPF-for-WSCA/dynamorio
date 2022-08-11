@@ -16,6 +16,16 @@ P0L1I {                        // P0 L1 instruction cache
   assoc           8
   parent          P0L2
   replace_policy  LRU
+  line_sizes      [
+    7,
+    14,
+    22,
+    32,
+    47,
+    64,
+    64,
+    64,
+  ]
 }
 P0L1D {                        // P0 L1 data cache
   type            data
