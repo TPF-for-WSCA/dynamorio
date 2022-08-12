@@ -187,15 +187,16 @@ config_reader_t::handle_int_config_list(std::vector<T> &settings_container)
     while (!fin_->eof()) {
         T val;
         // TODO: solve peek not seeint ]
-        char next = fin_->peek();
-        if (next == ']') {
+        *fin_ >> ws;
+        c = fin_->peek();
+        if (c == ']') {
             fin_->ignore();
             return true;
-        } else if (next == ',' || next == '\n') {
+        } else if (c == ',') {
             fin_->ignore();
             continue;
         } else {
-            (*fin_) >> val;
+            *fin_ >> ws >> val;
         }
         settings_container.push_back(val);
     }

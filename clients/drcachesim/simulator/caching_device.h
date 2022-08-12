@@ -36,15 +36,7 @@
 #ifndef _CACHING_DEVICE_H_
 #define _CACHING_DEVICE_H_ 1
 
-#include <functional>
-#include <unordered_map>
-#include <vector>
-
-#include "caching_device_block.h"
-#include "caching_device_stats.h"
-#include "basic_block_stats.h"
-#include "memref.h"
-#include "prefetcher.h"
+#include "i_caching_device.h"
 
 // Statistics collection is abstracted out into the caching_device_stats_t class.
 
@@ -54,9 +46,7 @@
 // We assume we're only invoked from a single thread of control and do
 // not need to synchronize data access.
 
-class snoop_filter_t;
-
-class caching_device_t {
+class caching_device_t : public I_caching_device_t {
 public:
     caching_device_t();
     virtual bool
@@ -64,47 +54,47 @@ public:
          caching_device_stats_t *stats, prefetcher_t *prefetcher = nullptr,
          bool inclusive = false, bool coherent_cache = false, int id_ = -1,
          snoop_filter_t *snoop_filter_ = nullptr,
-         const std::vector<caching_device_t *> &children = {});
+         const std::vector<caching_device_t *> &children = {}) override;
     virtual ~caching_device_t();
     virtual void
-    request(const memref_t &memref);
+    request(const memref_t &memref) override;
     virtual void
-    invalidate(addr_t tag, invalidation_type_t invalidation_type_);
+    invalidate(addr_t tag, invalidation_type_t invalidation_type_) override;
     bool
-    contains_tag(addr_t tag);
+    contains_tag(addr_t tag) override;
     void
-    propagate_eviction(addr_t tag, const caching_device_t *requester);
+    propagate_eviction(addr_t tag, const caching_device_t *requester) override;
     void
-    propagate_write(addr_t tag, const caching_device_t *requester);
+    propagate_write(addr_t tag, const caching_device_t *requester) override;
 
     caching_device_stats_t *
-    get_stats() const
+    get_stats() const override
     {
         return stats_;
     }
     void
-    set_stats(caching_device_stats_t *stats)
+    set_stats(caching_device_stats_t *stats) override
     {
         stats_ = stats;
     }
     prefetcher_t *
-    get_prefetcher() const
+    get_prefetcher() const override
     {
         return prefetcher_;
     }
     caching_device_t *
-    get_parent() const
+    get_parent() const override
     {
         return parent_;
     }
     inline double
-    get_loaded_fraction() const
+    get_loaded_fraction() const override
     {
         return double(loaded_blocks_) / num_blocks_;
     }
     // Must be called prior to any call to request().
     virtual inline void
-    set_hashtable_use(bool use_hashtable)
+    set_hashtable_use(bool use_hashtable) override
     {
         if (!use_tag2block_table_ && use_hashtable) {
             // Resizing from an initial small table causes noticeable overhead, so we
@@ -117,7 +107,7 @@ public:
         use_tag2block_table_ = use_hashtable;
     }
     int
-    get_block_index(const addr_t addr) const
+    get_block_index(const addr_t addr) const override
     {
         addr_t tag = compute_tag(addr);
         int block_idx = compute_block_idx(tag);

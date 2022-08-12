@@ -114,7 +114,7 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
         success_ = false;
         return;
     }
-
+    // TODO: Initialize to correct type of cache
     l1_icaches_ = new cache_t *[knobs_.num_cores];
     l1_dcaches_ = new cache_t *[knobs_.num_cores];
     unsigned int total_snooped_caches = 2 * knobs_.num_cores;
