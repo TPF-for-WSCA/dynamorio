@@ -22,11 +22,21 @@ vcl_caching_device_t::~vcl_caching_device_t()
 }
 
 bool
-vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int num_blocks,
+vcl_caching_device_t::init(int associativity, int block_size, int num_blocks,
                            caching_device_t *parent, caching_device_stats_t *stats,
                            prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
-                           int id_, snoop_filter_t *snoop_filter,
+                           int id_, snoop_filter_t *snoop_filter_,
                            const std::vector<caching_device_t *> &children)
+{
+    return false;
+}
+
+bool
+vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int num_blocks,
+                           I_caching_device_t *parent, caching_device_stats_t *stats,
+                           prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
+                           int id_, snoop_filter_t *snoop_filter,
+                           const std::vector<I_caching_device_t *> &children)
 {
     if (!IS_POWER_OF_2(associativity))
         return false;

@@ -40,6 +40,7 @@
 
 class cache_lru_t : public cache_t {
 public:
+    using cache_t::init;
     bool
     init(int associativity, int line_size, int total_size, caching_device_t *parent,
          caching_device_stats_t *stats, prefetcher_t *prefetcher, bool inclusive = false,

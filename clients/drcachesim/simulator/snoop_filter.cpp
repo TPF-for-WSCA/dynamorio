@@ -88,7 +88,7 @@ snoop_filter_t::snoop(addr_t tag, int id, bool is_write)
             // Writes will invalidate other caches_.
             for (int i = 0; i < num_snooped_caches_; i++) {
                 if (coherence_entry->sharers[i] && id != i) {
-                    caches_[i]->invalidate(tag, INVALIDATION_COHERENCE);
+                    caches_[i]->caching_device_t::invalidate(tag, INVALIDATION_COHERENCE);
                     num_invalidates_++;
                     coherence_entry->sharers[i] = false;
                 }

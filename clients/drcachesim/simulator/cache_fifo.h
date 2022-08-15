@@ -40,7 +40,7 @@
 
 class cache_fifo_t : public cache_t {
 public:
-    bool
+    virtual bool
     init(int associativity, int line_size, int total_size, caching_device_t *parent,
          caching_device_stats_t *stats, prefetcher_t *prefetcher, bool inclusive = false,
          bool coherent_cache = false, int id_ = -1,

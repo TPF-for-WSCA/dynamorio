@@ -140,7 +140,7 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
         snooped_caches_[(2 * i) + 1] = l1_dcaches_[i];
         std::string output_dir = op_data_dir.get_value() + "/" +
             std::to_string(knobs_.sim_refs) + "/" + std::to_string(knobs_.L1I_size);
-        if (!l1_icaches_[i]->init(
+        if (!l1_icaches_[i]->cache_t::init(
                 knobs_.L1I_assoc, (int)knobs_.line_size, (int)knobs_.L1I_size, llc,
                 new basic_block_stats_t((int)knobs_.line_size, "", output_dir,
                                         warmup_enabled_, knobs_.model_coherence),
@@ -378,7 +378,7 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
     // enable if we anticipate a win.
     if (other_caches_.size() > 0 && (knobs_.model_coherence || knobs_.num_cores >= 32)) {
         for (auto &cache : all_caches_) {
-            cache.second->set_hashtable_use(true);
+            cache.second->caching_device_t::set_hashtable_use(true);
         }
     }
 }
@@ -387,8 +387,8 @@ cache_simulator_t::~cache_simulator_t()
 {
     for (auto &caches_it : all_caches_) {
         cache_t *cache = caches_it.second;
-        delete cache->get_stats();
-        delete cache->get_prefetcher();
+        delete cache->caching_device_t::get_stats();
+        delete cache->caching_device_t::get_prefetcher();
         delete cache;
     }
 
@@ -511,7 +511,7 @@ cache_simulator_t::process_memref(const memref_t &memref)
     if (!is_warmed_up_ && check_warmed_up()) {
         for (auto &cache_it : all_caches_) {
             cache_t *cache = cache_it.second;
-            cache->get_stats()->reset();
+            cache->caching_device_t::get_stats()->reset();
         }
         if (knobs_.verbose >= 1) {
             std::cerr << "Cache simulation warmed up\n";
@@ -539,7 +539,8 @@ cache_simulator_t::check_warmed_up()
     if (knobs_.warmup_fraction > 0.0) {
         is_warmed_up_ = true;
         for (auto &cache : llcaches_) {
-            if (cache.second->get_loaded_fraction() < knobs_.warmup_fraction) {
+            if (cache.second->caching_device_t::get_loaded_fraction() <
+                knobs_.warmup_fraction) {
                 is_warmed_up_ = false;
                 break;
             }
@@ -574,12 +575,12 @@ cache_simulator_t::print_results()
         if (thread_ever_counts_[i] > 0) {
             if (l1_icaches_[i] != l1_dcaches_[i]) {
                 std::cerr << "  L1I stats:" << std::endl;
-                l1_icaches_[i]->get_stats()->print_stats("    ");
+                l1_icaches_[i]->caching_device_t::get_stats()->print_stats("    ");
                 std::cerr << "  L1D stats:" << std::endl;
-                l1_dcaches_[i]->get_stats()->print_stats("    ");
+                l1_dcaches_[i]->caching_device_t::get_stats()->print_stats("    ");
             } else {
                 std::cerr << "  unified L1 stats:" << std::endl;
-                l1_icaches_[i]->get_stats()->print_stats("    ");
+                l1_icaches_[i]->caching_device_t::get_stats()->print_stats("    ");
             }
         }
     }
@@ -587,13 +588,13 @@ cache_simulator_t::print_results()
     // Print non-L1, non-LLC cache stats.
     for (auto &caches_it : other_caches_) {
         std::cerr << caches_it.first << " stats:" << std::endl;
-        caches_it.second->get_stats()->print_stats("    ");
+        caches_it.second->caching_device_t::get_stats()->print_stats("    ");
     }
 
     // Print LLC stats.
     for (auto &caches_it : llcaches_) {
         std::cerr << caches_it.first << " stats:" << std::endl;
-        caches_it.second->get_stats()->print_stats("    ");
+        caches_it.second->caching_device_t::get_stats()->print_stats("    ");
     }
 
     if (knobs_.model_coherence) {

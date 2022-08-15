@@ -119,6 +119,7 @@ add_exported_library(drmemtrace_simulator STATIC
   simulator/cache_fifo.cpp
   simulator/cache_miss_analyzer.cpp
   simulator/caching_device.cpp
+  simulator/vcl_caching_device.cpp
   simulator/caching_device_stats.cpp
   simulator/basic_block_stats.cpp
   simulator/cache_stats.cpp
@@ -264,6 +265,7 @@ install_client_nonDR_header(drmemtrace tools/opcode_mix_create.h)
 install_client_nonDR_header(drmemtrace simulator/cache_simulator.h)
 install_client_nonDR_header(drmemtrace simulator/cache_simulator_create.h)
 install_client_nonDR_header(drmemtrace simulator/tlb_simulator_create.h)
+install_client_nonDR_header(drmemtrace simulator/i_caching_device.h)
 install_client_nonDR_header(drmemtrace tools/view_create.h)
 install_client_nonDR_header(drmemtrace tools/func_view_create.h)
 install_client_nonDR_header(drmemtrace tracer/raw2trace.h)

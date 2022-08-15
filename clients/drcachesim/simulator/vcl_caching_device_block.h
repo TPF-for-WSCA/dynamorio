@@ -43,7 +43,6 @@
 // e.g., a CPU cache line or a virtual/physical page, we can use special value
 // that cannot be computed from valid address as special tag for
 // block status.
-static const addr_t TAG_INVALID = (addr_t)-1; // block is invalid
 
 class vcl_caching_device_block_t : public caching_device_block_t {
 public:
@@ -58,7 +57,7 @@ public:
     {
     }
     // Destructor must be virtual and default is not.
-    virtual ~caching_device_block_t()
+    virtual ~vcl_caching_device_block_t()
     {
     }
 

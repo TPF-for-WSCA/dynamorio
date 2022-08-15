@@ -43,16 +43,17 @@ cache_t::init(int associativity, int line_size, int total_size, caching_device_t
     // convert total_size to num_blocks to fit for caching_device_t::init
     int num_lines = total_size / line_size;
 
-    return caching_device_t::init(associativity, line_size, num_lines, parent, stats,
-                                  prefetcher, inclusive, coherent_cache, id, snoop_filter,
-                                  children);
+    return caching_device_t::init(associativity, line_size, num_lines,
+                                  (caching_device_t *)parent, stats, prefetcher,
+                                  inclusive, coherent_cache, id, snoop_filter,
+                                  static_cast<std::vector<caching_device_t *>>(children));
 }
 
 void
 cache_t::init_blocks()
 {
-    for (int i = 0; i < num_blocks_; i++) {
-        blocks_[i] = new cache_line_t;
+    for (int i = 0; i < caching_device_t::num_blocks_; i++) {
+        caching_device_t::blocks_[i] = new cache_line_t;
     }
 }
 
@@ -65,20 +66,20 @@ cache_t::request(const memref_t &memref)
 void
 cache_t::flush(const memref_t &memref)
 {
-    addr_t tag = compute_tag(memref.flush.addr);
-    addr_t final_tag =
-        compute_tag(memref.flush.addr + memref.flush.size - 1 /*no overflow*/);
-    last_tag_ = TAG_INVALID;
+    addr_t tag = caching_device_t::compute_tag(memref.flush.addr);
+    addr_t final_tag = caching_device_t::compute_tag(
+        memref.flush.addr + memref.flush.size - 1 /*no overflow*/);
+    caching_device_t::last_tag_ = TAG_INVALID;
     for (; tag <= final_tag; ++tag) {
-        auto block_way = find_caching_device_block(tag);
+        auto block_way = caching_device_t::find_caching_device_block(tag);
         if (block_way.first == nullptr)
             continue;
-        invalidate_caching_device_block(block_way.first);
+        caching_device_t::invalidate_caching_device_block(block_way.first);
     }
     // We flush parent_'s code cache here.
     // XXX: should L1 data cache be flushed when L1 instr cache is flushed?
-    if (parent_ != NULL)
-        ((cache_t *)parent_)->flush(memref);
-    if (stats_ != NULL)
-        ((cache_stats_t *)stats_)->flush(memref);
+    if (caching_device_t::parent_ != NULL)
+        ((cache_t *)caching_device_t::parent_)->flush(memref);
+    if (caching_device_t::stats_ != NULL)
+        ((cache_stats_t *)caching_device_t::stats_)->flush(memref);
 }

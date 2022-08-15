@@ -1,20 +1,20 @@
 #ifndef _VCL_CACHING_DEVICE_H_
 #define _VCL_CACHING_DEVICE_H_
 
-#include "caching_device.h"
-#include "vcl_caching_device_block.h"
+#include "i_caching_device.h"
 
-class vcl_caching_device_t : public caching_device_t {
+class vcl_caching_device_t : public I_caching_device_t {
 
 public:
-    vcl_caching_device_t() override;
+    vcl_caching_device_t();
+    using I_caching_device_t::init;
     virtual bool
     init(int associativity, std::vector<int> &way_sizes, int num_blocks,
-         caching_device_t *parent, caching_device_stats_t *stats,
+         I_caching_device_t *parent, caching_device_stats_t *stats,
          prefetcher_t *prefetcher = nullptr, bool inclusive = false,
          bool coherent_cache = false, int id_ = -1,
          snoop_filter_t *snoop_filter_ = nullptr,
-         const std::vector<caching_device_t *> &children = {});
+         const std::vector<I_caching_device_t *> &children = {}) override;
     virtual ~vcl_caching_device_t() override;
     virtual void
     request(const memref_t &memref) override;
@@ -23,9 +23,9 @@ public:
     bool
     contains_tag(addr_t tag) override;
     void
-    propagate_eviction(addr_t tag, const caching_device_t *requester) override;
+    propagate_eviction(addr_t tag, const I_caching_device_t *requester) override;
     void
-    propagate_write(addr_t tag, const caching_device_t *requester) override;
+    propagate_write(addr_t tag, const I_caching_device_t *requester) override;
 
     caching_device_stats_t *
     get_stats() const override
@@ -36,7 +36,7 @@ public:
     void
     set_stats(caching_device_stats_t *stats) override
     {
-        stats_ = stats;
+        this->stats_ = stats;
     }
 
     prefetcher_t *
@@ -91,16 +91,19 @@ protected:
     compute_tag(addr_t addr) const override
     {
         // look up next branch
+        return 0;
     }
     inline int
     compute_block_idx(addr_t tag) const override
     {
         // TODO:;
+        return 0;
     }
     inline caching_device_block_t &
     get_caching_device_block(int block_idx, int way) const override
     {
         // TODO;
+        return *this->blocks_[0];
     }
 
     inline void
@@ -117,12 +120,12 @@ protected:
 
     // Returns the block (and its way) whose tag equals `tag`.
     // Returns <nullptr,0> if there is no such block.
-    std::pair<caching_device_block_t *, int>
+    virtual std::pair<caching_device_block_t *, int>
     find_caching_device_block(addr_t tag) override;
 
     // a pure virtual function for subclasses to initialize their own block array
     virtual void
-    init_blocks() = 0;
+    init_blocks() override;
 
     int associativity_;
     // len of block_sizes_ needs to be equal associativity

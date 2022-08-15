@@ -60,10 +60,10 @@ caching_device_t::~caching_device_t()
 
 bool
 caching_device_t::init(int associativity, int block_size, int num_blocks,
-                       caching_device_t *parent, caching_device_stats_t *stats,
+                       I_caching_device_t *parent, caching_device_stats_t *stats,
                        prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
                        int id, snoop_filter_t *snoop_filter,
-                       const std::vector<caching_device_t *> &children)
+                       const std::vector<I_caching_device_t *> &children)
 {
     if (!IS_POWER_OF_2(associativity) || !IS_POWER_OF_2(block_size) ||
         !IS_POWER_OF_2(num_blocks) ||
@@ -100,6 +100,17 @@ caching_device_t::init(int associativity, int block_size, int num_blocks,
     children_ = children;
 
     return true;
+}
+
+bool
+caching_device_t::init(int associativity, std::vector<int> &way_sizes, int num_blocks,
+                       I_caching_device_t *parent, caching_device_stats_t *stats,
+                       prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
+                       int id, snoop_filter_t *snoop_filter,
+                       const std::vector<I_caching_device_t *> &children)
+{
+    // not supported here
+    return false;
 }
 
 std::pair<caching_device_block_t *, int>
