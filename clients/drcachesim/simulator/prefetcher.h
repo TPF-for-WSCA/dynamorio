@@ -36,7 +36,6 @@
 #ifndef _PREFETCHER_H_
 #define _PREFETCHER_H_ 1
 
-#include "caching_device.h"
 #include "memref.h"
 
 class caching_device_t;

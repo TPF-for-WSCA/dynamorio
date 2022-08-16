@@ -140,14 +140,14 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
         snooped_caches_[(2 * i) + 1] = l1_dcaches_[i];
         std::string output_dir = op_data_dir.get_value() + "/" +
             std::to_string(knobs_.sim_refs) + "/" + std::to_string(knobs_.L1I_size);
-        if (!l1_icaches_[i]->init(
-                knobs_.L1I_assoc, (int)knobs_.line_size, (int)knobs_.L1I_size, llc,
+        if (!l1_icaches_[i]->cache_t::init(
+                knobs_.L1I_assoc, (int)knobs_.line_size, (int)knobs_.L1I_size, llc->self_,
                 new basic_block_stats_t((int)knobs_.line_size, "", output_dir,
                                         warmup_enabled_, knobs_.model_coherence),
                 nullptr /*prefetcher*/, false /*inclusive*/, knobs_.model_coherence,
                 2 * i, snoop_filter_) ||
             !l1_dcaches_[i]->init(
-                knobs_.L1D_assoc, (int)knobs_.line_size, (int)knobs_.L1D_size, llc,
+                knobs_.L1D_assoc, (int)knobs_.line_size, (int)knobs_.L1D_size, llc->self_,
                 new cache_stats_t((int)knobs_.line_size, "", warmup_enabled_,
                                   knobs_.model_coherence),
                 nullptr /*prefetcher*/, false /*inclusive*/, knobs_.model_coherence,
@@ -193,6 +193,7 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
                knobs_.warmup_fraction, knobs_.sim_refs, knobs_.cpu_scheduling,
                knobs_.verbose);
 
+    // TODO: PREFETCHER HEURISTICS?
     if (knobs_.data_prefetcher != PREFETCH_POLICY_NEXTLINE &&
         knobs_.data_prefetcher != PREFETCH_POLICY_NONE) {
         // Unknown prefetcher type.
@@ -289,7 +290,7 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         }
 
         // Locate the cache's children.
-        std::vector<caching_device_t *> children;
+        std::vector<I_caching_device_t *> children;
         children.clear();
         for (std::string &child_name : cache_config.children) {
             const auto &child_it = all_caches_.find(child_name);
@@ -299,7 +300,7 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
                 success_ = false;
                 return;
             }
-            children.push_back(child_it->second);
+            children.push_back(child_it->second->self_);
         }
 
         // Determine if this cache should be connected to the snoop filter.
@@ -325,8 +326,12 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
                                   warmup_enabled_, is_coherent_);
         }
 
+        I_caching_device_t *parent_device = NULL;
+        if (parent_) {
+            parent_device = parent_->self_;
+        }
         if (!cache->init((int)cache_config.assoc, (int)knobs_.line_size,
-                         (int)cache_config.size, parent_, stats_collector,
+                         (int)cache_config.size, parent_device, stats_collector,
                          nullptr /*prefetcher*/, cache_config.inclusive, is_coherent_,
                          is_snooped ? snoop_id : -1, is_snooped ? snoop_filter_ : nullptr,
                          children)) {
@@ -378,7 +383,7 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
     // enable if we anticipate a win.
     if (other_caches_.size() > 0 && (knobs_.model_coherence || knobs_.num_cores >= 32)) {
         for (auto &cache : all_caches_) {
-            cache.second->set_hashtable_use(true);
+            cache.second->self_->set_hashtable_use(true);
         }
     }
 }
@@ -387,8 +392,8 @@ cache_simulator_t::~cache_simulator_t()
 {
     for (auto &caches_it : all_caches_) {
         cache_t *cache = caches_it.second;
-        delete cache->get_stats();
-        delete cache->get_prefetcher();
+        delete cache->self_->get_stats();
+        delete cache->self_->get_prefetcher();
         delete cache;
     }
 
@@ -511,7 +516,7 @@ cache_simulator_t::process_memref(const memref_t &memref)
     if (!is_warmed_up_ && check_warmed_up()) {
         for (auto &cache_it : all_caches_) {
             cache_t *cache = cache_it.second;
-            cache->get_stats()->reset();
+            cache->self_->get_stats()->reset();
         }
         if (knobs_.verbose >= 1) {
             std::cerr << "Cache simulation warmed up\n";
@@ -539,7 +544,7 @@ cache_simulator_t::check_warmed_up()
     if (knobs_.warmup_fraction > 0.0) {
         is_warmed_up_ = true;
         for (auto &cache : llcaches_) {
-            if (cache.second->get_loaded_fraction() < knobs_.warmup_fraction) {
+            if (cache.second->self_->get_loaded_fraction() < knobs_.warmup_fraction) {
                 is_warmed_up_ = false;
                 break;
             }
@@ -574,12 +579,12 @@ cache_simulator_t::print_results()
         if (thread_ever_counts_[i] > 0) {
             if (l1_icaches_[i] != l1_dcaches_[i]) {
                 std::cerr << "  L1I stats:" << std::endl;
-                l1_icaches_[i]->get_stats()->print_stats("    ");
+                l1_icaches_[i]->self_->get_stats()->print_stats("    ");
                 std::cerr << "  L1D stats:" << std::endl;
-                l1_dcaches_[i]->get_stats()->print_stats("    ");
+                l1_dcaches_[i]->self_->get_stats()->print_stats("    ");
             } else {
                 std::cerr << "  unified L1 stats:" << std::endl;
-                l1_icaches_[i]->get_stats()->print_stats("    ");
+                l1_icaches_[i]->self_->get_stats()->print_stats("    ");
             }
         }
     }
@@ -587,13 +592,13 @@ cache_simulator_t::print_results()
     // Print non-L1, non-LLC cache stats.
     for (auto &caches_it : other_caches_) {
         std::cerr << caches_it.first << " stats:" << std::endl;
-        caches_it.second->get_stats()->print_stats("    ");
+        caches_it.second->self_->get_stats()->print_stats("    ");
     }
 
     // Print LLC stats.
     for (auto &caches_it : llcaches_) {
         std::cerr << caches_it.first << " stats:" << std::endl;
-        caches_it.second->get_stats()->print_stats("    ");
+        caches_it.second->self_->get_stats()->print_stats("    ");
     }
 
     if (knobs_.model_coherence) {
@@ -609,20 +614,20 @@ int_least64_t
 cache_simulator_t::get_cache_metric(metric_name_t metric, unsigned level, unsigned core,
                                     cache_split_t split) const
 {
-    caching_device_t *curr_cache;
+    I_caching_device_t *curr_cache;
 
     if (core >= knobs_.num_cores) {
         return STATS_ERROR_WRONG_CORE_NUMBER;
     }
 
     if (split == cache_split_t::DATA) {
-        curr_cache = l1_dcaches_[core];
+        curr_cache = l1_dcaches_[core]->self_;
     } else {
-        curr_cache = l1_icaches_[core];
+        curr_cache = l1_icaches_[core]->self_;
     }
 
     for (size_t i = 1; i < level; i++) {
-        caching_device_t *parent = curr_cache->get_parent();
+        I_caching_device_t *parent = curr_cache->get_parent();
 
         if (parent == NULL) {
             return STATS_ERROR_WRONG_CACHE_LEVEL;
@@ -645,15 +650,29 @@ cache_simulator_t::get_knobs() const
 }
 
 cache_t *
-cache_simulator_t::create_cache(const std::string &policy)
+cache_simulator_t::create_cache(const std::string &policy, bool vcl_enabled)
 {
+    I_caching_device_t *cache_device;
+    // TODO: decide to vcl or not
+    // for now: no vcl
+    if (vcl_enabled) {
+        cache_device = new vcl_caching_device_t;
+    } else {
+        cache_device = new caching_device_t;
+    }
+    cache_t *cache = nullptr;
     if (policy == REPLACE_POLICY_NON_SPECIFIED || // default LRU
         policy == REPLACE_POLICY_LRU)             // set to LRU
-        return new cache_lru_t;
+        cache = new cache_lru_t(cache_device);
     if (policy == REPLACE_POLICY_LFU) // set to LFU
-        return new cache_t;
+        cache = new cache_t(cache_device);
     if (policy == REPLACE_POLICY_FIFO) // set to FIFO
-        return new cache_fifo_t;
+        cache = new cache_fifo_t(cache_device);
+
+    if (cache) {
+        cache_device->cache_ = cache;
+        return cache;
+    }
 
     // undefined replacement policy
     ERRMSG("Usage error: undefined replacement policy. "

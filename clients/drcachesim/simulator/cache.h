@@ -36,30 +36,41 @@
 #ifndef _CACHE_H_
 #define _CACHE_H_ 1
 
-#include "caching_device.h"
+#include "i_caching_device.h"
 #include "cache_line.h"
 #include "cache_stats.h"
 
-class cache_t : public caching_device_t {
+class cache_t {
 public:
     // Size, line size and associativity are generally used
     // to describe a CPU cache.
     // The id is an index into the snoop filter's array of caches for coherent caches.
     // If this is a coherent cache, id should be in the range [0,num_snooped_caches).
-    bool
-    init(int associativity, int line_size, int total_size, caching_device_t *parent,
+    cache_t(I_caching_device_t *self);
+    virtual ~cache_t();
+    virtual bool
+    init(int associativity, int line_size, int total_size, I_caching_device_t *parent,
          caching_device_stats_t *stats, prefetcher_t *prefetcher = nullptr,
          bool inclusive = false, bool coherent_cache = false, int id_ = -1,
          snoop_filter_t *snoop_filter_ = nullptr,
-         const std::vector<caching_device_t *> &children = {}) override;
+         const std::vector<I_caching_device_t *> &children = {});
     void
-    request(const memref_t &memref) override;
+    request(const memref_t &memref);
     virtual void
     flush(const memref_t &memref);
 
+    I_caching_device_t *self_;
+
 protected:
     void
-    init_blocks() override;
+    init_blocks();
+
+    virtual void
+    access_update(int block_idx, int way);
+    virtual int
+    replace_which_way(int block_idx);
+    virtual int
+    get_next_way_to_replace(const int block_idx) const;
 };
 
 #endif /* _CACHE_H_ */

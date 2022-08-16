@@ -3,30 +3,45 @@
 #include <math.h>
 
 vcl_caching_device_t::vcl_caching_device_t()
-    : blocks_(NULL)
-    , stats_(NULL)
-    , prefetcher_(NULL)
-    , tag2block(0, [](memref_t key) { return static_cast<unsigned long>(key.data.addr); })
+    : I_caching_device_t()
 {
 }
 
 vcl_caching_device_t::~vcl_caching_device_t()
 {
     if (blocks_ == NULL) {
-        return
+        return;
     }
-    for (auto const &block : blocks_) {
-        delete block;
+    for (int i = 0; i < num_blocks_; i++) {
+        delete blocks_[i];
     }
     delete[] blocks_;
 }
 
+void
+vcl_caching_device_t::init_blocks()
+{
+    for (int i = 0; i < num_blocks_; i++) {
+        blocks_[i] = new vcl_caching_device_block_t;
+    }
+}
+
+bool
+vcl_caching_device_t::init(int associativity, int block_size, int num_blocks,
+                           I_caching_device_t *parent, caching_device_stats_t *stats,
+                           prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
+                           int id, snoop_filter_t *snoop_filter_,
+                           const std::vector<I_caching_device_t *> &children)
+{
+    return false;
+}
+
 bool
 vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int num_blocks,
-                           caching_device_t *parent, caching_device_stats_t *stats,
+                           I_caching_device_t *parent, caching_device_stats_t *stats,
                            prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
-                           int id_, snoop_filter_t *snoop_filter,
-                           const std::vector<caching_device_t *> &children)
+                           int id, snoop_filter_t *snoop_filter,
+                           const std::vector<I_caching_device_t *> &children)
 {
     if (!IS_POWER_OF_2(associativity))
         return false;
@@ -37,9 +52,9 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
 
     associativity_ = associativity;
     block_sizes_ = way_sizes;
-    block_size_ = std::max(way_sizes);
+    block_size_ = *(std::max_element(way_sizes.begin(), way_sizes.end()));
     num_blocks_ = num_blocks;
-    loaded_blocks = 0;
+    loaded_blocks_ = 0;
     sets_in_cache_ = num_blocks_ / associativity;
     blocks_per_set_mask_ = sets_in_cache_ - 1;
     assoc_bits_ = std::ceil(
@@ -62,7 +77,7 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
     snoop_filter_ = snoop_filter;
     coherent_cache_ = coherent_cache;
     // TODO: check that - we need correctly sized blocks
-    blocks_ = new vcl_caching_device_block_t *[num_blocks_];
+    blocks_ = (caching_device_block_t **)new vcl_caching_device_block_t *[num_blocks_];
 
     // initialize block sizes
     int way_count = 1;
@@ -78,4 +93,46 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
     children_ = children;
 
     return true;
+}
+
+void
+vcl_caching_device_t::request(_memref_t const &)
+{
+}
+void
+vcl_caching_device_t::invalidate(unsigned long, invalidation_type_t)
+{
+}
+bool
+vcl_caching_device_t::contains_tag(unsigned long)
+{
+}
+void
+vcl_caching_device_t::propagate_eviction(unsigned long, I_caching_device_t const *)
+{
+}
+void
+vcl_caching_device_t::propagate_write(unsigned long, I_caching_device_t const *)
+{
+}
+void
+vcl_caching_device_t::access_update(int, int)
+{
+}
+int
+vcl_caching_device_t::replace_which_way(int)
+{
+}
+int
+vcl_caching_device_t::get_next_way_to_replace(int) const
+{
+}
+void
+vcl_caching_device_t::record_access_stats(_memref_t const &, bool,
+                                          caching_device_block_t *)
+{
+}
+std::pair<caching_device_block_t *, int>
+vcl_caching_device_t::find_caching_device_block(unsigned long)
+{
 }

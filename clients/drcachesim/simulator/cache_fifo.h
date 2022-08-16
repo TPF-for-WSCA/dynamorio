@@ -40,19 +40,24 @@
 
 class cache_fifo_t : public cache_t {
 public:
-    bool
-    init(int associativity, int line_size, int total_size, caching_device_t *parent,
+    cache_fifo_t(I_caching_device_t *self)
+        : cache_t(self)
+    {
+    }
+    using cache_t::init;
+    virtual bool
+    init(int associativity, int line_size, int total_size, I_caching_device_t *parent,
          caching_device_stats_t *stats, prefetcher_t *prefetcher, bool inclusive = false,
          bool coherent_cache = false, int id_ = -1,
          snoop_filter_t *snoop_filter_ = nullptr,
-         const std::vector<caching_device_t *> &children = {}) override;
+         const std::vector<I_caching_device_t *> &children = {}) override;
 
 protected:
-    void
+    virtual void
     access_update(int block_idx, int way) override;
-    int
+    virtual int
     replace_which_way(int block_idx) override;
-    int
+    virtual int
     get_next_way_to_replace(const int block_idx) const override;
 };
 

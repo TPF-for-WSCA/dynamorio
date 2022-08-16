@@ -39,13 +39,7 @@
 #include <assert.h>
 
 caching_device_t::caching_device_t()
-    : blocks_(NULL)
-    , stats_(NULL)
-    , prefetcher_(NULL)
-    // The tag being hashed is already right-shifted to the cache line and
-    // an identity hash is plenty good enough and nice and fast.
-    // We set the size and load factor only if being used, in set_hashtable_use().
-    , tag2block(0, [](addr_t key) { return static_cast<unsigned long>(key); })
+    : I_caching_device_t()
 {
 }
 
@@ -58,12 +52,20 @@ caching_device_t::~caching_device_t()
     delete[] blocks_;
 }
 
+void
+caching_device_t::init_blocks()
+{
+    for (int i = 0; i < num_blocks_; i++) {
+        blocks_[i] = new caching_device_block_t;
+    }
+}
+
 bool
 caching_device_t::init(int associativity, int block_size, int num_blocks,
-                       caching_device_t *parent, caching_device_stats_t *stats,
+                       I_caching_device_t *parent, caching_device_stats_t *stats,
                        prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
                        int id, snoop_filter_t *snoop_filter,
-                       const std::vector<caching_device_t *> &children)
+                       const std::vector<I_caching_device_t *> &children)
 {
     if (!IS_POWER_OF_2(associativity) || !IS_POWER_OF_2(block_size) ||
         !IS_POWER_OF_2(num_blocks) ||
@@ -100,6 +102,17 @@ caching_device_t::init(int associativity, int block_size, int num_blocks,
     children_ = children;
 
     return true;
+}
+
+bool
+caching_device_t::init(int associativity, std::vector<int> &way_sizes, int num_blocks,
+                       I_caching_device_t *parent, caching_device_stats_t *stats,
+                       prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
+                       int id, snoop_filter_t *snoop_filter,
+                       const std::vector<I_caching_device_t *> &children)
+{
+    // not supported here
+    return false;
 }
 
 std::pair<caching_device_block_t *, int>
@@ -332,7 +345,7 @@ caching_device_t::contains_tag(addr_t tag)
 // A child has evicted this tag, we propagate this notification to the snoop filter,
 // unless this cache or one of its other children holds this line.
 void
-caching_device_t::propagate_eviction(addr_t tag, const caching_device_t *requester)
+caching_device_t::propagate_eviction(addr_t tag, const I_caching_device_t *requester)
 {
     // Check our own cache for this line.
     auto block_way = find_caching_device_block(tag);
@@ -362,7 +375,7 @@ caching_device_t::propagate_eviction(addr_t tag, const caching_device_t *request
  * in any other children.
  */
 void
-caching_device_t::propagate_write(addr_t tag, const caching_device_t *requester)
+caching_device_t::propagate_write(addr_t tag, const I_caching_device_t *requester)
 {
     // Invalidate other children.
     for (auto &child : children_) {
@@ -387,7 +400,8 @@ caching_device_t::record_access_stats(const memref_t &memref, bool hit,
     // We propagate hits all the way up the hierachy.
     // But to avoid over-counting we only propagate misses one level up.
     if (hit) {
-        for (caching_device_t *up = parent_; up != nullptr; up = up->parent_)
+        for (caching_device_t *up = (caching_device_t *)parent_; up != nullptr;
+             up = ((caching_device_t *)up->parent_))
             up->stats_->child_access(memref, hit, cache_block);
     } else if (parent_ != nullptr)
         parent_->stats_->child_access(memref, hit, cache_block);

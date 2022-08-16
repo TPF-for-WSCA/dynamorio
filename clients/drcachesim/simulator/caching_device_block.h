@@ -54,6 +54,7 @@ public:
     caching_device_block_t()
         : tag_(TAG_INVALID)
         , counter_(0)
+        , size_(-1)
     {
     }
     // Destructor must be virtual and default is not.
@@ -67,6 +68,8 @@ public:
     // A 32-bit counter should be sufficient but we may want to revisit.
     // We already have stdint.h so we can reinstate int_least64_t easily.
     int counter_; // for use by replacement policies
+    int size_;    // block size in bytes - depend on the way the block belongs to for vcl,
+                  // but same for non-vcl
 };
 
 #endif /* _CACHING_DEVICE_BLOCK_H_ */

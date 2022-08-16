@@ -160,11 +160,11 @@ cache_miss_analyzer_t::cache_miss_analyzer_t(const cache_simulator_knobs_t &knob
     }
     bool warmup_enabled_ = (knobs.warmup_refs > 0 || knobs.warmup_fraction > 0.0);
 
-    delete llcaches_["LL"]->get_stats();
+    delete llcaches_["LL"]->self_->get_stats();
     ll_stats_ =
         new cache_miss_stats_t(warmup_enabled_, knobs.line_size, miss_count_threshold,
                                miss_frac_threshold, confidence_threshold);
-    llcaches_["LL"]->set_stats(ll_stats_);
+    llcaches_["LL"]->self_->set_stats(ll_stats_);
 
     if (!knobs.LL_miss_file.empty()) {
         recommendation_file_ = knobs.LL_miss_file;

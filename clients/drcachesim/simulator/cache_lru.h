@@ -40,12 +40,18 @@
 
 class cache_lru_t : public cache_t {
 public:
-    bool
-    init(int associativity, int line_size, int total_size, caching_device_t *parent,
+    cache_lru_t(I_caching_device_t *self)
+        : cache_t(self)
+    {
+    }
+
+    using cache_t::init;
+    virtual bool
+    init(int associativity, int line_size, int total_size, I_caching_device_t *parent,
          caching_device_stats_t *stats, prefetcher_t *prefetcher, bool inclusive = false,
          bool coherent_cache = false, int id_ = -1,
          snoop_filter_t *snoop_filter_ = nullptr,
-         const std::vector<caching_device_t *> &children = {}) override;
+         const std::vector<I_caching_device_t *> &children = {}) override;
 
 protected:
     void
