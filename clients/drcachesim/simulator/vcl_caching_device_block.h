@@ -51,23 +51,13 @@ public:
     // we expect any use of counter to only occur *after* a valid tag is put in place,
     // where for the current replacement code we also set the counter at that time.
     vcl_caching_device_block_t()
-        : tag_(TAG_INVALID)
-        , counter_(0)
-        , size_(-1)
+        : caching_device_block_t()
     {
     }
     // Destructor must be virtual and default is not.
     virtual ~vcl_caching_device_block_t()
     {
     }
-
-    addr_t tag_;
-
-    // XXX: using int_least64_t here results in a ~4% slowdown for 32-bit apps.
-    // A 32-bit counter should be sufficient but we may want to revisit.
-    // We already have stdint.h so we can reinstate int_least64_t easily.
-    int counter_; // for use by replacement policies
-    int size_;    // block size in bytes - depend on the way the block belongs to
 };
 
 #endif /* _VCL_CACHING_DEVICE_BLOCK_H_ */

@@ -39,10 +39,10 @@
 
 bool
 cache_lru_t::init(int associativity, int block_size, int total_size,
-                  caching_device_t *parent, caching_device_stats_t *stats,
+                  I_caching_device_t *parent, caching_device_stats_t *stats,
                   prefetcher_t *prefetcher, bool inclusive, bool coherent_cache, int id,
                   snoop_filter_t *snoop_filter,
-                  const std::vector<caching_device_t *> &children)
+                  const std::vector<I_caching_device_t *> &children)
 {
     // Works in the same way as the base class,
     // except that the counters are initialized in a different way.
@@ -54,11 +54,9 @@ cache_lru_t::init(int associativity, int block_size, int total_size,
         return false;
 
     // Initialize line counters with 0, 1, 2, ..., associativity - 1.
-    for (int i = 0; i < blocks_per_set_; i++) {
-        for (int way = 0; way < caching_device_t::associativity_; ++way) {
-            caching_device_t::get_caching_device_block(i << caching_device_t::assoc_bits_,
-                                                       way)
-                .counter_ = way;
+    for (int i = 0; i < self_->blocks_per_set_; i++) {
+        for (int way = 0; way < self_->associativity_; ++way) {
+            self_->get_caching_device_block(i << self_->assoc_bits_, way).counter_ = way;
         }
     }
     return true;
@@ -67,18 +65,17 @@ cache_lru_t::init(int associativity, int block_size, int total_size,
 void
 cache_lru_t::access_update(int block_idx, int way)
 {
-    int cnt = caching_device_t::get_caching_device_block(block_idx, way).counter_;
+    int cnt = self_->get_caching_device_block(block_idx, way).counter_;
     // Optimization: return early if it is a repeated access.
     if (cnt == 0)
         return;
     // We inc all the counters that are not larger than cnt for LRU.
-    for (int i = 0; i < caching_device_t::associativity_; ++i) {
-        if (i != way &&
-            caching_device_t::get_caching_device_block(block_idx, i).counter_ <= cnt)
-            caching_device_t::get_caching_device_block(block_idx, i).counter_++;
+    for (int i = 0; i < self_->associativity_; ++i) {
+        if (i != way && self_->get_caching_device_block(block_idx, i).counter_ <= cnt)
+            self_->get_caching_device_block(block_idx, i).counter_++;
     }
     // Clear the counter for LRU.
-    caching_device_t::get_caching_device_block(block_idx, way).counter_ = 0;
+    self_->get_caching_device_block(block_idx, way).counter_ = 0;
 }
 
 int
@@ -93,16 +90,13 @@ cache_lru_t::get_next_way_to_replace(int block_idx) const
     // We implement LRU by picking the slot with the largest counter value.
     int max_counter = 0;
     int max_way = 0;
-    for (int way = 0; way < caching_device_t::associativity_; ++way) {
-        if (caching_device_t::get_caching_device_block(block_idx, way).tag_ ==
-            TAG_INVALID) {
+    for (int way = 0; way < self_->associativity_; ++way) {
+        if (self_->get_caching_device_block(block_idx, way).tag_ == TAG_INVALID) {
             max_way = way;
             break;
         }
-        if (caching_device_t::get_caching_device_block(block_idx, way).counter_ >
-            max_counter) {
-            max_counter =
-                caching_device_t::get_caching_device_block(block_idx, way).counter_;
+        if (self_->get_caching_device_block(block_idx, way).counter_ > max_counter) {
+            max_counter = self_->get_caching_device_block(block_idx, way).counter_;
             max_way = way;
         }
     }

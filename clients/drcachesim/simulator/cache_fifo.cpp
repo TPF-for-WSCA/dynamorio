@@ -40,10 +40,10 @@
 
 bool
 cache_fifo_t::init(int associativity, int block_size, int total_size,
-                   caching_device_t *parent, caching_device_stats_t *stats,
+                   I_caching_device_t *parent, caching_device_stats_t *stats,
                    prefetcher_t *prefetcher, bool inclusive, bool coherent_cache, int id,
                    snoop_filter_t *snoop_filter,
-                   const std::vector<caching_device_t *> &children)
+                   const std::vector<I_caching_device_t *> &children)
 {
     // Works in the same way as the base class,
     // except that the counters are initialized in a different way.
@@ -56,9 +56,8 @@ cache_fifo_t::init(int associativity, int block_size, int total_size,
 
     // Create a replacement pointer for each set, and
     // initialize it to point to the first block.
-    for (int i = 0; i < blocks_per_set_; i++) {
-        caching_device_t::get_caching_device_block(i << caching_device_t::assoc_bits_, 0)
-            .counter_ = 1;
+    for (int i = 0; i < self_->blocks_per_set_; i++) {
+        self_->get_caching_device_block(i << self_->assoc_bits_, 0).counter_ = 1;
     }
     return true;
 }
@@ -82,10 +81,11 @@ cache_fifo_t::replace_which_way(int block_idx)
     if (victim_way == -1)
         return -1;
     // clear the counter of the victim block
-    caching_device_t::get_caching_device_block(block_idx, victim_way).counter_ = 0;
+    self_->get_caching_device_block(block_idx, victim_way).counter_ = 0;
     // set the next block as victim
-    caching_device_t::get_caching_device_block(
-        block_idx, (victim_way + 1) & (caching_device_t::associativity_ - 1))
+    self_
+        ->get_caching_device_block(block_idx,
+                                   (victim_way + 1) & (self_->associativity_ - 1))
         .counter_ = 1;
     return victim_way;
 }
@@ -95,9 +95,9 @@ cache_fifo_t::replace_which_way(int block_idx)
 int
 cache_fifo_t::get_next_way_to_replace(const int block_idx) const
 {
-    for (int i = 0; i < caching_device_t::associativity_; i++) {
+    for (int i = 0; i < self_->associativity_; i++) {
         // We return the block whose counter is 1.
-        if (caching_device_t::get_caching_device_block(block_idx, i).counter_ == 1) {
+        if (self_->get_caching_device_block(block_idx, i).counter_ == 1) {
             return i;
         }
     }

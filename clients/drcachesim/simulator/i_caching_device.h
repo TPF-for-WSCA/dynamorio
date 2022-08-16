@@ -6,8 +6,6 @@
 #include <vector>
 
 #include "caching_device_block.h"
-#include "vcl_caching_device_block.h"
-#include "caching_device_stats.h"
 #include "basic_block_stats.h"
 #include "memref.h"
 #include "prefetcher.h"
@@ -16,6 +14,18 @@ class snoop_filter_t;
 
 class I_caching_device_t {
 public:
+    I_caching_device_t()
+        : blocks_(NULL)
+        , stats_(NULL)
+        , prefetcher_(NULL)
+        , cache_(NULL)
+        // The tag being hashed is already right-shifted to the cache line and
+        // an identity hash is plenty good enough and nice and fast.
+        // We set the size and load factor only if being used, in set_hashtable_use().
+        , tag2block(0, [](addr_t key) { return static_cast<unsigned long>(key); })
+    {
+    }
+
     virtual ~I_caching_device_t()
     {
     }
@@ -62,7 +72,6 @@ public:
     virtual int
     get_block_index(const addr_t addr) const = 0;
 
-protected:
     virtual void
     access_update(int block_idx, int way) {};
     virtual int
@@ -79,12 +88,12 @@ protected:
     record_access_stats(const memref_t &memref, bool hit,
                         caching_device_block_t *cache_block) {};
 
-    virtual inline addr_t
-    compute_tag(addr_t addr) const;
-    virtual inline int
-    compute_block_idx(addr_t tag) const;
-    virtual inline caching_device_block_t &
-    get_caching_device_block(int block_idx, int way) const;
+    virtual addr_t
+    compute_tag(addr_t addr) const = 0;
+    virtual int
+    compute_block_idx(addr_t tag) const = 0;
+    virtual caching_device_block_t &
+    get_caching_device_block(int block_idx, int way) const = 0;
 
     virtual inline void
     invalidate_caching_device_block(caching_device_block_t *block) = 0;
@@ -95,11 +104,65 @@ protected:
     // Returns the block (and its way) whose tag equals `tag`.
     // Returns <nullptr,0> if there is no such block.
     virtual std::pair<caching_device_block_t *, int>
-    find_caching_device_block(addr_t tag);
+    find_caching_device_block(addr_t tag) = 0;
 
     // a pure virtual function for subclasses to initialize their own block array
     virtual void
     init_blocks() = 0;
+
+    int num_blocks_;
+    bool coherent_cache_;
+    // This is an index into snoop filter's array of caches.
+    int id_;
+
+    // Current valid blocks in the cache
+    int loaded_blocks_;
+
+    // Pointers to the caching device's parent and children devices.
+    I_caching_device_t *parent_;
+    std::vector<I_caching_device_t *> children_;
+
+    snoop_filter_t *snoop_filter_;
+
+    // If true, this device is inclusive of its children.
+    bool inclusive_;
+
+    // This should be an array of caching_device_block_t pointers, otherwise
+    // an extended block class which has its own member variables cannot be indexed
+    // correctly by base class pointers.
+    caching_device_block_t **blocks_;
+    int blocks_per_set_;
+    int sets_in_cache_;
+    int associativity_;
+    int block_size_;
+    // len of block_sizes_ needs to be equal associativity
+    std::vector<int> block_sizes_;
+    caching_device_stats_t *stats_;
+    // Optimization fields for fast bit operations
+    int blocks_per_set_mask_;
+    int assoc_bits_;
+    std::vector<int> block_sizes_bits_;
+    int block_size_bits_;
+
+    prefetcher_t *prefetcher_;
+
+    // Optimization: remember last tag
+    addr_t last_tag_;
+    int last_way_;
+    int last_block_idx_;
+
+    void *cache_;
+
+    // Optimization: keep a hashtable for quick lookup of {block,way}
+    // given a tag, if using a large cache hierarchy where serial
+    // walks over the associativity end up as bottlenecks.
+    // We can't easily remove the blocks_ array and replace with just
+    // the hashtable as replace_which_way(), etc. want quick access to
+    // every way for a given line index.
+    std::unordered_map<addr_t, std::pair<caching_device_block_t *, int>,
+                       std::function<unsigned long(addr_t)>>
+        tag2block;
+    bool use_tag2block_table_ = false;
 };
 
 #endif

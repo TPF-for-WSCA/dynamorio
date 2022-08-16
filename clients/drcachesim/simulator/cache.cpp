@@ -34,52 +34,79 @@
 #include "../common/utils.h"
 #include <assert.h>
 
-bool
-cache_t::init(int associativity, int line_size, int total_size, caching_device_t *parent,
-              caching_device_stats_t *stats, prefetcher_t *prefetcher, bool inclusive,
-              bool coherent_cache, int id, snoop_filter_t *snoop_filter,
-              const std::vector<caching_device_t *> &children)
+cache_t::cache_t(I_caching_device_t *self)
+    : self_(self)
 {
-    // convert total_size to num_blocks to fit for caching_device_t::init
+}
+
+cache_t::~cache_t()
+{
+    delete self_;
+    return;
+}
+
+bool
+cache_t::init(int associativity, int line_size, int total_size,
+              I_caching_device_t *parent, caching_device_stats_t *stats,
+              prefetcher_t *prefetcher, bool inclusive, bool coherent_cache, int id,
+              snoop_filter_t *snoop_filter,
+              const std::vector<I_caching_device_t *> &children)
+{
+    // convert total_size to num_blocks to fit for self_->init
     int num_lines = total_size / line_size;
 
-    return caching_device_t::init(associativity, line_size, num_lines,
-                                  (caching_device_t *)parent, stats, prefetcher,
-                                  inclusive, coherent_cache, id, snoop_filter,
-                                  static_cast<std::vector<caching_device_t *>>(children));
+    return self_->init(associativity, line_size, num_lines, parent, stats, prefetcher,
+                       inclusive, coherent_cache, id, snoop_filter, children);
 }
 
 void
 cache_t::init_blocks()
 {
-    for (int i = 0; i < caching_device_t::num_blocks_; i++) {
-        caching_device_t::blocks_[i] = new cache_line_t;
+    for (int i = 0; i < self_->num_blocks_; i++) {
+        self_->blocks_[i] = new cache_line_t;
     }
 }
 
 void
 cache_t::request(const memref_t &memref)
 {
-    caching_device_t::request(memref);
+    self_->request(memref);
 }
 
 void
 cache_t::flush(const memref_t &memref)
 {
-    addr_t tag = caching_device_t::compute_tag(memref.flush.addr);
-    addr_t final_tag = caching_device_t::compute_tag(
-        memref.flush.addr + memref.flush.size - 1 /*no overflow*/);
-    caching_device_t::last_tag_ = TAG_INVALID;
+    addr_t tag = self_->compute_tag(memref.flush.addr);
+    addr_t final_tag =
+        self_->compute_tag(memref.flush.addr + memref.flush.size - 1 /*no overflow*/);
+    self_->last_tag_ = TAG_INVALID;
     for (; tag <= final_tag; ++tag) {
-        auto block_way = caching_device_t::find_caching_device_block(tag);
+        auto block_way = self_->find_caching_device_block(tag);
         if (block_way.first == nullptr)
             continue;
-        caching_device_t::invalidate_caching_device_block(block_way.first);
+        self_->invalidate_caching_device_block(block_way.first);
     }
     // We flush parent_'s code cache here.
     // XXX: should L1 data cache be flushed when L1 instr cache is flushed?
-    if (caching_device_t::parent_ != NULL)
-        ((cache_t *)caching_device_t::parent_)->flush(memref);
-    if (caching_device_t::stats_ != NULL)
-        ((cache_stats_t *)caching_device_t::stats_)->flush(memref);
+    if (self_->parent_ != NULL)
+        ((cache_t *)(self_->parent_->cache_))->flush(memref);
+    if (self_->stats_ != NULL)
+        ((cache_stats_t *)self_->stats_)->flush(memref);
 }
+
+void
+cache_t::access_update(int block_idx, int way)
+{
+    self_->access_update(block_idx, way);
+};
+
+int
+cache_t::replace_which_way(int block_idx)
+{
+    return self_->replace_which_way(block_idx);
+};
+int
+cache_t::get_next_way_to_replace(const int block_idx) const
+{
+    return self_->get_next_way_to_replace(block_idx);
+};
