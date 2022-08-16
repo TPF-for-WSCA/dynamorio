@@ -193,6 +193,7 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
                knobs_.warmup_fraction, knobs_.sim_refs, knobs_.cpu_scheduling,
                knobs_.verbose);
 
+    // TODO: PREFETCHER HEURISTICS?
     if (knobs_.data_prefetcher != PREFETCH_POLICY_NEXTLINE &&
         knobs_.data_prefetcher != PREFETCH_POLICY_NONE) {
         // Unknown prefetcher type.
@@ -649,11 +650,16 @@ cache_simulator_t::get_knobs() const
 }
 
 cache_t *
-cache_simulator_t::create_cache(const std::string &policy)
+cache_simulator_t::create_cache(const std::string &policy, bool vcl_enabled)
 {
+    I_caching_device_t *cache_device;
     // TODO: decide to vcl or not
     // for now: no vcl
-    I_caching_device_t *cache_device = new caching_device_t;
+    if (vcl_enabled) {
+        cache_device = new vcl_caching_device_t;
+    } else {
+        cache_device = new caching_device_t;
+    }
     cache_t *cache = nullptr;
     if (policy == REPLACE_POLICY_NON_SPECIFIED || // default LRU
         policy == REPLACE_POLICY_LRU)             // set to LRU

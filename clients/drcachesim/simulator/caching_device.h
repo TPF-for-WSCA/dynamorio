@@ -37,7 +37,6 @@
 #define _CACHING_DEVICE_H_ 1
 
 #include "i_caching_device.h"
-#include "caching_device.h"
 
 // Statistics collection is abstracted out into the caching_device_stats_t class.
 

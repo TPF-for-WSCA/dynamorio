@@ -94,3 +94,45 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
 
     return true;
 }
+
+void
+vcl_caching_device_t::request(_memref_t const &)
+{
+}
+void
+vcl_caching_device_t::invalidate(unsigned long, invalidation_type_t)
+{
+}
+bool
+vcl_caching_device_t::contains_tag(unsigned long)
+{
+}
+void
+vcl_caching_device_t::propagate_eviction(unsigned long, I_caching_device_t const *)
+{
+}
+void
+vcl_caching_device_t::propagate_write(unsigned long, I_caching_device_t const *)
+{
+}
+void
+vcl_caching_device_t::access_update(int, int)
+{
+}
+int
+vcl_caching_device_t::replace_which_way(int)
+{
+}
+int
+vcl_caching_device_t::get_next_way_to_replace(int) const
+{
+}
+void
+vcl_caching_device_t::record_access_stats(_memref_t const &, bool,
+                                          caching_device_block_t *)
+{
+}
+std::pair<caching_device_block_t *, int>
+vcl_caching_device_t::find_caching_device_block(unsigned long)
+{
+}

@@ -40,6 +40,7 @@
 #include <vector>
 #include "caching_device_stats.h"
 #include "caching_device.h"
+#include "vcl_caching_device.h"
 #include "analysis_tool.h"
 #include "memref.h"
 

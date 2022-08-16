@@ -2,7 +2,6 @@
 #define _VCL_CACHING_DEVICE_H_
 
 #include "i_caching_device.h"
-#include "vcl_caching_device.h"
 #include "vcl_caching_device_block.h"
 
 class vcl_caching_device_t : public I_caching_device_t {
