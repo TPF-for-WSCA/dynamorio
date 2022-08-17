@@ -86,6 +86,8 @@ protected:
     std::vector<size_t> basic_block_size_history;
     std::unordered_map<BasicBlock, size_t> basic_blocks_hit_count;
     std::unordered_map<addr_t, std::vector<BasicBlock>> number_of_bytes_accessed;
+    std::unordered_map<addr_t, int> eviction_to_fetch_index_map;
+    std::vector<std::pair<addr_t, uint64_t>> perfect_fetch_history;
 
 private:
     void

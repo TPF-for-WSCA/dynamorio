@@ -10,6 +10,7 @@
  */
 
 #include <iostream>
+#include <ostream>
 #include <fstream>
 #include <iomanip>
 #include <cassert>
@@ -562,6 +563,26 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         //     print_last_n_memrefs(9);
         handle_interrupt(memref, hit);
     }
+
+    if (!hit) {
+        auto base_addr = memref.instr.addr & cache_line_address_mask;
+        auto it = eviction_to_fetch_index_map.find(base_addr);
+        int prev_idx = -1;
+        if (it != eviction_to_fetch_index_map.end()) {
+            prev_idx = it->second;
+        }
+
+        if (prev_idx != -1) {
+            auto presences = bytes_accessed_per_presence_per_cacheline[base_addr];
+            auto last_presence = presences.back();
+            auto total_accesses = get_total_mask_for_presence(last_presence);
+            perfect_fetch_history[prev_idx] = std::pair(base_addr, total_accesses);
+        }
+        // ELSE: This is a compulsory miss
+
+        perfect_fetch_history.push_back(std::pair(base_addr, 0));
+        eviction_to_fetch_index_map[base_addr] = perfect_fetch_history.size() - 1;
+    }
     // if (handled_instructions % ANALYSED_INSTRUCTIONS_PER_ITERATION == 0) {
     //     std::ostringstream oss;
     //     oss << "Stats after " << handled_instructions << " instructions:\n";
@@ -882,6 +903,34 @@ basic_block_stats_t::print_bytes_accessed()
                 continue;
             num_lines_with_accesses_of_size[i] += 1;
         }
+    }
+
+    std::ofstream perfect_loading_decisions_csv;
+    std::cout << "Write file to " << output_dir << std::endl;
+    perfect_loading_decisions_csv.open((output_dir + "/perfect_loading.csv"),
+                                       std::ios::out);
+    for (auto const &[base_addr, idx] : eviction_to_fetch_index_map) {
+        auto presences = bytes_accessed_per_presence_per_cacheline[base_addr];
+        auto last_presence = presences.back();
+        auto total_accesses = get_total_mask_for_presence(last_presence);
+        perfect_fetch_history[idx] = std::pair(base_addr, total_accesses);
+    }
+    if (!perfect_loading_decisions_csv) {
+        std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
+                  << "/perfect_loading.csv\n";
+        std::cout << "==== PERFECT LOADING DECISIONS ====\n";
+        for (const auto &addr_mask_pair : perfect_fetch_history) {
+            std::cout << addr_mask_pair.first << "; " << addr_mask_pair.second << "\n";
+        }
+    } else {
+        perfect_loading_decisions_csv << "sep=;\n";
+        perfect_loading_decisions_csv << "64b aligned addr;mask\n";
+        for (const auto &addr_mask_pair : perfect_fetch_history) {
+            perfect_loading_decisions_csv << addr_mask_pair.first << "; "
+                                          << addr_mask_pair.second << "\n";
+        }
+        perfect_loading_decisions_csv.flush();
+        perfect_loading_decisions_csv.close();
     }
 
     std::ofstream distinct_cachelines_csv;
@@ -1248,6 +1297,8 @@ basic_block_stats_t::reset()
     // TODO: Fixup missing variables
     count_per_basic_block_byte_size_.clear();
     count_per_basic_block_instr_size_.clear();
+    eviction_to_fetch_index_map.clear();
+    perfect_fetch_history.clear();
     current_block = {
         .starting_addr = 0, .end_addr = 0, .instr_size = 0, .byte_size = 0
     };

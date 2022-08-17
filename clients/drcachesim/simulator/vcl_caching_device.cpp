@@ -96,43 +96,57 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
 }
 
 void
-vcl_caching_device_t::request(_memref_t const &)
+vcl_caching_device_t::request(_memref_t const &memref)
 {
 }
+
 void
-vcl_caching_device_t::invalidate(unsigned long, invalidation_type_t)
+vcl_caching_device_t::invalidate(addr_t tag, invalidation_type_t invalidation_type_)
 {
 }
+
 bool
-vcl_caching_device_t::contains_tag(unsigned long)
+vcl_caching_device_t::contains_tag(addr_t tag)
 {
+    return false;
 }
+
 void
-vcl_caching_device_t::propagate_eviction(unsigned long, I_caching_device_t const *)
+vcl_caching_device_t::propagate_eviction(addr_t tag, const I_caching_device_t *requester)
 {
 }
+
 void
-vcl_caching_device_t::propagate_write(unsigned long, I_caching_device_t const *)
+vcl_caching_device_t::propagate_write(addr_t tag, const I_caching_device_t *requester)
 {
 }
+
 void
-vcl_caching_device_t::access_update(int, int)
+vcl_caching_device_t::access_update(int block_idx, int way)
 {
 }
+
 int
-vcl_caching_device_t::replace_which_way(int)
+vcl_caching_device_t::replace_which_way(int block_idx)
 {
+    return -1;
 }
+
 int
-vcl_caching_device_t::get_next_way_to_replace(int) const
+vcl_caching_device_t::get_next_way_to_replace(const int block_idx) const
 {
+    return -1;
 }
+
+// TODO: Type double that function for the vcl blocks r unify block interface
 void
-vcl_caching_device_t::record_access_stats(_memref_t const &, bool,
-                                          caching_device_block_t *)
+vcl_caching_device_t::record_access_stats(const _memref_t &memref, bool hit,
+                                          caching_device_block_t *cache_block)
 {
 }
+
 std::pair<caching_device_block_t *, int>
-vcl_caching_device_t::find_caching_device_block(unsigned long)
+vcl_caching_device_t::find_caching_device_block(addr_t tag)
 {
+    return std::make_pair(new caching_device_block_t, -1);
 }
