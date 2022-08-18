@@ -295,6 +295,7 @@ bool
 basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
 {
     bool is_interrupt_ = false;
+    bool is_fresh = false;
     if (current_block.starting_addr == 0) {
         current_block.miss = !hit;
         current_block.starting_addr = memref.data.addr;
@@ -324,6 +325,8 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
                                current_block_cacheline_constrained.byte_size));
 
     bool aliasing_eviction = (is_adjacent_instr && !hit && prev_hit);
+
+    is_fresh = prev_cacheline_base_address != curr_cacheline_base_address && !hit;
 
     // We do not orient ourselves at branches but only at cacheline base_addresses
     // and corresponding jumps
@@ -397,7 +400,7 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
         max_instr_size = memref.data.size;
     }
 
-    prev_hit = hit;
+    prev_hit = (hit || is_fresh);
     return is_interrupt_;
 }
 
