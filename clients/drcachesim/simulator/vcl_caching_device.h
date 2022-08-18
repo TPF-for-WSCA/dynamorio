@@ -1,6 +1,9 @@
 #ifndef _VCL_CACHING_DEVICE_H_
 #define _VCL_CACHING_DEVICE_H_
 
+// #define _VCL_SETS_EXTENSION
+#define _VCL_WAY_EXTENSION
+
 #include "i_caching_device.h"
 #include "vcl_caching_device_block.h"
 
@@ -92,6 +95,8 @@ protected:
     access_update(int block_idx, int way) override;
     virtual int
     replace_which_way(int block_idx) override;
+    int
+    replace_which_way(int block_idx, int size);
     virtual int
     get_next_way_to_replace(const int block_idx) const override;
     virtual void
@@ -107,8 +112,11 @@ protected:
     inline int
     compute_block_idx(addr_t tag) const override
     {
-        // TODO:;
-        return 0;
+#ifdef _VCL_WAY_EXTENSION
+        return (tag & set_idx_mask_) << assoc_bits_;
+#else // _VCL_SET_EXTENSION
+        return -1; // todo
+#endif
     }
     inline caching_device_block_t &
     get_caching_device_block(int block_idx, int way) const override

@@ -80,11 +80,11 @@ caching_device_t::init(int associativity, int block_size, int num_blocks,
     block_size_ = block_size;
     num_blocks_ = num_blocks;
     loaded_blocks_ = 0;
-    blocks_per_set_ = num_blocks_ / associativity;
+    num_sets_ = num_blocks_ / associativity;
     assoc_bits_ = compute_log2(associativity_);
     block_size_bits_ = compute_log2(block_size);
-    blocks_per_set_mask_ = blocks_per_set_ - 1;
-    if (assoc_bits_ == -1 || block_size_bits_ == -1 || !IS_POWER_OF_2(blocks_per_set_))
+    set_idx_mask_ = num_sets_ - 1;
+    if (assoc_bits_ == -1 || block_size_bits_ == -1 || !IS_POWER_OF_2(num_sets_))
         return false;
     parent_ = parent;
     stats_ = stats;

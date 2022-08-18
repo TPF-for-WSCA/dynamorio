@@ -30,7 +30,8 @@ public:
     {
     }
 
-    virtual bool vcl_enabled() = 0;
+    virtual bool
+    vcl_enabled() = 0;
 
     virtual bool
     init(int associativity, int block_size, int num_blocks, I_caching_device_t *parent,
@@ -133,7 +134,7 @@ public:
     // an extended block class which has its own member variables cannot be indexed
     // correctly by base class pointers.
     caching_device_block_t **blocks_;
-    int blocks_per_set_;
+    int num_sets_;
     int sets_in_cache_;
     int associativity_;
     int block_size_;
@@ -141,7 +142,7 @@ public:
     std::vector<int> block_sizes_;
     caching_device_stats_t *stats_;
     // Optimization fields for fast bit operations
-    int blocks_per_set_mask_;
+    int set_idx_mask_;
     int assoc_bits_;
     std::vector<int> block_sizes_bits_;
     int block_size_bits_;

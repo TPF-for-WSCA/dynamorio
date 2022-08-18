@@ -144,7 +144,7 @@ public:
     virtual inline int
     compute_block_idx(addr_t tag) const override
     {
-        return (tag & blocks_per_set_mask_) << assoc_bits_;
+        return (tag & set_idx_mask_) << assoc_bits_;
     }
     virtual inline caching_device_block_t &
     get_caching_device_block(int block_idx, int way) const override
