@@ -32,6 +32,7 @@
 
 #include "cache.h"
 #include "../common/utils.h"
+#include <numeric>
 #include <assert.h>
 
 cache_t::cache_t(I_caching_device_t *self)
@@ -56,6 +57,18 @@ cache_t::init(int associativity, int line_size, int total_size,
     int num_lines = total_size / line_size;
 
     return self_->init(associativity, line_size, num_lines, parent, stats, prefetcher,
+                       inclusive, coherent_cache, id, snoop_filter, children);
+}
+
+bool
+cache_t::init(int associativity, std::vector<int> line_sizes, int total_size,
+              I_caching_device_t *parent, caching_device_stats_t *stats,
+              prefetcher_t *prefetcher, bool inclusive, bool coherent_cache, int id,
+              snoop_filter_t *snoop_filter,
+              const std::vector<I_caching_device_t *> &children)
+{
+    int num_sets = total_size / std::accumulate(line_sizes.begin(), line_sizes.end(), 0);
+    return self_->init(associativity, line_sizes, num_sets, parent, stats, prefetcher,
                        inclusive, coherent_cache, id, snoop_filter, children);
 }
 

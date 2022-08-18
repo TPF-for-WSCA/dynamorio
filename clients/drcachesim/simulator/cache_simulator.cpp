@@ -211,7 +211,8 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         std::string cache_name = cache_params_it.first;
         const auto &cache_config = cache_params_it.second;
 
-        cache_t *cache = create_cache(cache_config.replace_policy);
+        cache_t *cache =
+            create_cache(cache_config.replace_policy, !cache_config.line_sizes.empty());
         if (cache == NULL) {
             success_ = false;
             return;
@@ -330,11 +331,24 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         if (parent_) {
             parent_device = parent_->self_;
         }
-        if (!cache->init((int)cache_config.assoc, (int)knobs_.line_size,
-                         (int)cache_config.size, parent_device, stats_collector,
-                         nullptr /*prefetcher*/, cache_config.inclusive, is_coherent_,
-                         is_snooped ? snoop_id : -1, is_snooped ? snoop_filter_ : nullptr,
-                         children)) {
+
+        auto config = cache_params[cache_name];
+        bool cache_initialized = false;
+        if (cache->self_->vcl_enabled()) {
+            cache_initialized = cache->init(
+                (int)cache_config.assoc, config.line_sizes, (int)cache_config.size,
+                parent_device, stats_collector, nullptr /*prefetcher*/,
+                cache_config.inclusive, is_coherent_, is_snooped ? snoop_id : -1,
+                is_snooped ? snoop_filter_ : nullptr, children);
+        } else {
+            cache_initialized = cache->init(
+                (int)cache_config.assoc, (int)knobs_.line_size, (int)cache_config.size,
+                parent_device, stats_collector, nullptr /*prefetcher*/,
+                cache_config.inclusive, is_coherent_, is_snooped ? snoop_id : -1,
+                is_snooped ? snoop_filter_ : nullptr, children);
+        }
+
+        if (!cache_initialized) {
             error_string_ = "Usage error: failed to initialize the cache " + cache_name;
             success_ = false;
             return;

@@ -18,6 +18,12 @@ vcl_caching_device_t::~vcl_caching_device_t()
     delete[] blocks_;
 }
 
+bool
+vcl_caching_device_t::vcl_enabled()
+{
+    return true;
+}
+
 void
 vcl_caching_device_t::init_blocks()
 {

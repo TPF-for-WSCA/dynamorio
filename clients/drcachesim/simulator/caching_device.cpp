@@ -134,6 +134,12 @@ caching_device_t::find_caching_device_block(addr_t tag)
     return std::make_pair(nullptr, 0);
 }
 
+bool
+caching_device_t::vcl_enabled()
+{
+    return false;
+}
+
 void
 caching_device_t::request(const memref_t &memref_in)
 {

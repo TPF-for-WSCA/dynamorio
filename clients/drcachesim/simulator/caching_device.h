@@ -64,6 +64,9 @@ public:
          snoop_filter_t *snoop_filter_ = nullptr,
          const std::vector<I_caching_device_t *> &children = {}) override;
 
+    virtual bool
+    vcl_enabled() override;
+
     virtual ~caching_device_t();
     virtual void
     request(const memref_t &memref) override;

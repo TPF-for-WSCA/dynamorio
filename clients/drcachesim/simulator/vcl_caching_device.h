@@ -9,6 +9,10 @@ class vcl_caching_device_t : public I_caching_device_t {
 public:
     vcl_caching_device_t();
     using I_caching_device_t::init;
+
+    virtual bool
+    vcl_enabled() override;
+
     virtual bool
     init(int associativity, std::vector<int> &way_sizes, int num_blocks,
          I_caching_device_t *parent, caching_device_stats_t *stats,

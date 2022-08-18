@@ -30,6 +30,8 @@ public:
     {
     }
 
+    virtual bool vcl_enabled() = 0;
+
     virtual bool
     init(int associativity, int block_size, int num_blocks, I_caching_device_t *parent,
          caching_device_stats_t *stats, prefetcher_t *prefetcher = nullptr,
