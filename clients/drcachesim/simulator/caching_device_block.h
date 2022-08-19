@@ -55,6 +55,7 @@ public:
         : tag_(TAG_INVALID)
         , counter_(0)
         , size_(-1)
+        , offset_(0)
     {
     }
     // Destructor must be virtual and default is not.
@@ -70,6 +71,7 @@ public:
     int counter_; // for use by replacement policies
     int size_;    // block size in bytes - depend on the way the block belongs to for vcl,
                   // but same for non-vcl
+    int offset_;  // depends where cb starts / always 0 for non-vcl
 };
 
 #endif /* _CACHING_DEVICE_BLOCK_H_ */

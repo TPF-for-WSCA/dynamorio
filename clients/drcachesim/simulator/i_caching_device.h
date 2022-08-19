@@ -1,5 +1,6 @@
 #ifndef _I_CACHING_DEVICE_H_
 #define _I_CACHING_DEVICE_H_ 1
+#define _CACHELINE_BASEADDRESS_MASK 0xFFFFFFFFFFFFFFC0
 
 #include <functional>
 #include <unordered_map>

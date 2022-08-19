@@ -908,32 +908,33 @@ basic_block_stats_t::print_bytes_accessed()
         }
     }
 
-    std::ofstream perfect_loading_decisions_csv;
+    std::ofstream perfect_loading_decisions_dat;
     std::cout << "Write file to " << output_dir << std::endl;
-    perfect_loading_decisions_csv.open((output_dir + "/perfect_loading.csv"),
-                                       std::ios::out);
+    perfect_loading_decisions_dat.open((output_dir + "/perfect_loading.dat"),
+                                       std::ios::out | std::ios::binary);
     for (auto const &[base_addr, idx] : eviction_to_fetch_index_map) {
         auto presences = bytes_accessed_per_presence_per_cacheline[base_addr];
         auto last_presence = presences.back();
-        auto total_accesses = get_total_mask_for_presence(last_presence);
+        uint64_t total_accesses = get_total_mask_for_presence(last_presence);
         perfect_fetch_history[idx] = std::pair(base_addr, total_accesses);
     }
-    if (!perfect_loading_decisions_csv) {
+    if (!perfect_loading_decisions_dat) {
         std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
-                  << "/perfect_loading.csv\n";
+                  << "/perfect_loading.dat\n";
         std::cout << "==== PERFECT LOADING DECISIONS ====\n";
         for (const auto &addr_mask_pair : perfect_fetch_history) {
             std::cout << addr_mask_pair.first << "; " << addr_mask_pair.second << "\n";
         }
     } else {
-        perfect_loading_decisions_csv << "sep=;\n";
-        perfect_loading_decisions_csv << "64b aligned addr;mask\n";
         for (const auto &addr_mask_pair : perfect_fetch_history) {
-            perfect_loading_decisions_csv << addr_mask_pair.first << "; "
+            perfect_loading_decisions_dat << addr_mask_pair.first << ";"
                                           << addr_mask_pair.second << "\n";
         }
-        perfect_loading_decisions_csv.flush();
-        perfect_loading_decisions_csv.close();
+        if (!perfect_loading_decisions_dat.good()) {
+            std::cerr << "writing failed..." << std::endl;
+        }
+        perfect_loading_decisions_dat.flush();
+        perfect_loading_decisions_dat.close();
     }
 
     std::ofstream distinct_cachelines_csv;

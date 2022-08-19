@@ -670,7 +670,7 @@ cache_simulator_t::create_cache(const std::string &policy, bool vcl_enabled)
     // TODO: decide to vcl or not
     // for now: no vcl
     if (vcl_enabled) {
-        cache_device = new vcl_caching_device_t;
+        cache_device = new vcl_caching_device_t(std::map<addr_t, std::set<uint64_t>>());
     } else {
         cache_device = new caching_device_t;
     }

@@ -2,9 +2,26 @@
 #include "../common/utils.h"
 #include <math.h>
 
-vcl_caching_device_t::vcl_caching_device_t()
+vcl_caching_device_t::vcl_caching_device_t(std::string perfect_fetch_file)
     : I_caching_device_t()
 {
+    perfect_loading_decision_fh_.open(perfect_fetch_file,
+                                      std::ios::in | std::ios::binary);
+}
+
+std::pair<int, int>
+vcl_caching_device_t::start_and_end_oracle(addr_t address)
+{
+    addr_t base_addr = address & _CACHELINE_BASEADDRESS_MASK;
+    auto add_to_block_mapping = base_address_to_blocks_mapping.find(base_addr);
+    while (add_to_block_mapping == base_address_to_blocks_mapping.end()) {
+        // read line and parse
+        // recheck if present
+        // endoffile: return (0, 64)
+    }
+    // IF found: check if block is present - otherwise jump back to parsing loop
+
+    return std::pair(-1, -1);
 }
 
 vcl_caching_device_t::~vcl_caching_device_t()
@@ -122,10 +139,24 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
 
         auto block_way = find_caching_device_block(tag);
         if (block_way.first != nullptr) {
-            // found
+            // found - check if in range
+            vcl_caching_device_block_t *cache_block =
+                (vcl_caching_device_block_t *)
+                    block_way.first; // we only store vcl blocks in vcl cache
+            way = block_way.second;
+            addr_t baseaddr = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
+            uint8_t start = memref.data.addr - baseaddr;
+            uint8_t end = start + memref.data.size;
+            if (cache_block->offset_ <= start &&
+                end <= (cache_block->size_ + cache_block->offset_)) {
+                // hit
+            } else {
+                // special miss handing - we need to lad partially
+            }
         } else {
             // miss
-            way = replace_which_way(block_idx, )
+            missed = true;
+            way = replace_which_way(block_idx, 64); // TODO: Fetch actual size from oracle
         }
     }
 }
@@ -159,37 +190,43 @@ vcl_caching_device_t::access_update(int block_idx, int way)
 int
 vcl_caching_device_t::replace_which_way(int block_idx)
 {
-    return -1;
+    return replace_which_way(
+        block_idx, 64); // We behave like a smaller cache but the same in terms of storage
 }
 
 int
 vcl_caching_device_t::replace_which_way(int block_idx, int size)
 {
     int first_viable_way;
-    for (int i = 0; i < block_sizes_.size(); ++i) {
+    for (size_t i = 0; i < block_sizes_.size(); ++i) {
         if (block_sizes_[i] > size) {
             first_viable_way = i;
             break;
         }
     }
 
-    int min_way = 0;
-    int min_counter = 0;
-    // We assume that the ways are sorted by size, such that we can assume that the
-    // smalles one fitting comes first.
-    std::vector<std::pair<int, int>>
-        candidate_sizes_and_idx; // We use it as <size, idx>. All INVALID lines are
-                                 // candidates + LRU candidate
+    // For now we simply do lru over the large enough entries
+    int max_way = 0;
+    int max_counter = 0;
+    // double best_weighted_relation = 0; // This could be an optimization that takes
+    // wasted bytes into account
+    // We assume that the ways are sorted by size, such that we
+    // can assume that the smalles one fitting comes first. std::vector<std::pair<int,
+    // int>>
+    //     candidate_sizes_and_idx; // We use it as <size, idx>. All INVALID lines are
+    //                              // candidates + LRU candidate
     for (int way = first_viable_way; way < associativity_; ++way) {
         if (get_caching_device_block(block_idx, way).tag_ == TAG_INVALID) {
-            candidate_sizes_and_idx.push_back(std::pair(block_sizes_[way], way));
+            max_way = way; // we found an empty way - use this
+            break;
         }
         if (way == first_viable_way ||
-            get_caching_device_block(block_idx, way).counter_ < min_counter) {
-            min_counter = get_caching_device_block(block_idx, way).counter_;
-            min_way = way;
+            get_caching_device_block(block_idx, way).counter_ > max_counter) {
+            max_counter = get_caching_device_block(block_idx, way).counter_;
+            max_way = way;
         }
     }
+    return max_way;
 }
 
 int

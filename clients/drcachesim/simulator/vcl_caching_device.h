@@ -5,12 +5,14 @@
 #define _VCL_WAY_EXTENSION
 
 #include "i_caching_device.h"
+#include <set>
+#include <fstream>
 #include "vcl_caching_device_block.h"
 
 class vcl_caching_device_t : public I_caching_device_t {
 
 public:
-    vcl_caching_device_t();
+    vcl_caching_device_t(std::string perfect_fetch_file);
     using I_caching_device_t::init;
 
     virtual bool
@@ -145,5 +147,11 @@ protected:
     // a pure virtual function for subclasses to initialize their own block array
     virtual void
     init_blocks() override;
+
+private:
+    std::pair<int, int>
+    vcl_caching_device_t::start_and_end_oracle(addr_t address);
+    std::map<addr_t, std::map<addr_t, int>> base_address_to_blocks_mapping;
+    std::ifstream perfect_loading_decision_fh_;
 };
 #endif /* _VCL_CACHING_DEVICE_H_ */
