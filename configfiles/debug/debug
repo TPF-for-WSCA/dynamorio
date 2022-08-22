@@ -25,8 +25,7 @@ P0L1I {                        // P0 L1 instruction cache
     64,
     64,
     64,
-  ],
-  perfect_block_predictor_file  ""
+  ]
 }
 P0L1D {                        // P0 L1 data cache
   type            data

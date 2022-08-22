@@ -60,6 +60,7 @@ struct cache_simulator_knobs_t {
         , LL_assoc(16)
         , LL_miss_file("")
         , data_dir("")
+        , perfect_block_predictor("")
         , model_coherence(false)
         , replace_policy("LRU")
         , data_prefetcher("nextline")
@@ -81,6 +82,7 @@ struct cache_simulator_knobs_t {
     unsigned int LL_assoc;
     std::string LL_miss_file;
     std::string data_dir;
+    std::string perfect_block_predictor;
     bool model_coherence;
     std::string replace_policy;
     std::string data_prefetcher;

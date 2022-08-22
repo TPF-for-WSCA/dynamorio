@@ -166,6 +166,13 @@ droption_t<std::string>
                 "which either will be written to data_dir or to the current working "
                 "directory, if the data dir flag is not specified.");
 
+droption_t<std::string> op_perfect_block_predictor(
+    DROPTION_SCOPE_ALL, "perfect_block_predictor", "",
+    "Used for VCL simulations as an oracle. Tracked from previous runs",
+    "The VCL caching device will use this file to predict the size of instruction "
+    "cache blocks and the contained useful bytes. The strategy used to extract "
+    "the perfect block predictor has currently to be changed in code.");
+
 droption_t<bool> op_L0_filter_deprecated(
     DROPTION_SCOPE_CLIENT, "L0_filter", false,
     "Filter out first-level instruction and data cache hits during tracing",

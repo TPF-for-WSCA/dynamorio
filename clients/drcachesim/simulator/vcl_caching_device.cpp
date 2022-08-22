@@ -72,10 +72,10 @@ vcl_caching_device_t::start_and_end_oracle(addr_t address)
         exp_backoff *= 1.5;
     }
     // currently going for min enclosing block
-    std::pair<addr_t, addr_t> candidate;
+    std::pair<addr_t, addr_t> candidate(base_addr, base_addr + 64);
     size_t min_block = 65;
     for (const auto &block : add_to_block_mapping->second) {
-        if (block.first < address && address < block.second &&
+        if (block.first <= address && address <= block.second &&
             block.second - block.first < min_block) {
             candidate = block;
         }

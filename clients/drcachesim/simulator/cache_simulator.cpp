@@ -213,7 +213,7 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
 
         cache_t *cache =
             create_cache(cache_config.replace_policy, !cache_config.line_sizes.empty(),
-                         cache_config.block_size_prediction_file);
+                         op_perfect_block_predictor.get_value());
         if (cache == NULL) {
             success_ = false;
             return;
