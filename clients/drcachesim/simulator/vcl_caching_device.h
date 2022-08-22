@@ -8,7 +8,17 @@
 #include <set>
 #include <fstream>
 #include "vcl_caching_device_block.h"
-
+struct AddrBlockCmp {
+    bool
+    operator()(const std::pair<addr_t, addr_t> &lhs,
+               const std::pair<addr_t, addr_t> &rhs) const
+    {
+        bool r = lhs.first < rhs.first;
+        if (lhs.first == rhs.first)
+            r = lhs.second < rhs.second;
+        return r;
+    }
+};
 class vcl_caching_device_t : public I_caching_device_t {
 
 public:
@@ -150,8 +160,11 @@ protected:
 
 private:
     std::pair<int, int>
-    vcl_caching_device_t::start_and_end_oracle(addr_t address);
-    std::map<addr_t, std::map<addr_t, int>> base_address_to_blocks_mapping;
+    start_and_end_oracle(addr_t address);
+    bool
+    read_n_oracle_lines(size_t n);
+    std::map<addr_t, std::set<std::pair<addr_t, addr_t>, AddrBlockCmp>>
+        base_address_to_blocks_mapping;
     std::ifstream perfect_loading_decision_fh_;
 };
 #endif /* _VCL_CACHING_DEVICE_H_ */

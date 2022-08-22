@@ -212,7 +212,8 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         const auto &cache_config = cache_params_it.second;
 
         cache_t *cache =
-            create_cache(cache_config.replace_policy, !cache_config.line_sizes.empty());
+            create_cache(cache_config.replace_policy, !cache_config.line_sizes.empty(),
+                         cache_config.block_size_prediction_file);
         if (cache == NULL) {
             success_ = false;
             return;
@@ -664,13 +665,14 @@ cache_simulator_t::get_knobs() const
 }
 
 cache_t *
-cache_simulator_t::create_cache(const std::string &policy, bool vcl_enabled)
+cache_simulator_t::create_cache(const std::string &policy, bool vcl_enabled,
+                                std::string perfect_predictor_file)
 {
     I_caching_device_t *cache_device;
     // TODO: decide to vcl or not
     // for now: no vcl
     if (vcl_enabled) {
-        cache_device = new vcl_caching_device_t(std::map<addr_t, std::set<uint64_t>>());
+        cache_device = new vcl_caching_device_t(perfect_predictor_file);
     } else {
         cache_device = new caching_device_t;
     }

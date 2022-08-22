@@ -59,6 +59,7 @@ struct cache_params_t {
         , replace_policy(REPLACE_POLICY_LRU)
         , prefetcher(PREFETCH_POLICY_NONE)
         , miss_file("")
+        , block_size_prediction_file("")
     {
     }
     // Cache's name. Each cache must have a unique name.
@@ -88,6 +89,8 @@ struct cache_params_t {
     std::string prefetcher;
     // Name of the file to use to dump cache misses info.
     std::string miss_file;
+    // Name of the file containing the block size oracle predictions for VCL caches
+    std::string block_size_prediction_file;
 
     // For VCL Caches: the different line sizes for this particular cache - sorted by size
     std::vector<int> line_sizes;

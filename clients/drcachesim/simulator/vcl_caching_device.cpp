@@ -1,5 +1,6 @@
 #include "vcl_caching_device.h"
 #include "../common/utils.h"
+#include <bits/basic_string.h>
 #include <math.h>
 
 vcl_caching_device_t::vcl_caching_device_t(std::string perfect_fetch_file)
@@ -9,19 +10,77 @@ vcl_caching_device_t::vcl_caching_device_t(std::string perfect_fetch_file)
                                       std::ios::in | std::ios::binary);
 }
 
+// TODO: Implement more sophisticated splitting behaviour here
+std::set<std::pair<addr_t, addr_t>, AddrBlockCmp>
+get_blocks_base_and_size(uint64_t mask, addr_t basic_block_addr)
+{
+    std::set<std::pair<addr_t, addr_t>, AddrBlockCmp> result;
+    int prev_bit = 0;
+    int curr_bit = 0;
+    uint8_t start = 0;
+    for (int i = 0; i < 64; ++i) {
+        curr_bit = mask >> i & 1;
+        if (curr_bit == 1 && prev_bit == 0) {
+            start = i;
+        } else if (curr_bit == 0 && prev_bit == 1) {
+            result.insert(std::pair(basic_block_addr + start, basic_block_addr + i - 1));
+        }
+        prev_bit = curr_bit;
+    }
+    if (curr_bit == 1) {
+        result.insert(std::pair(basic_block_addr + start, basic_block_addr + 63));
+    }
+    return result;
+}
+
+bool
+vcl_caching_device_t::read_n_oracle_lines(size_t n)
+{
+    std::string line;
+    bool notendoffile = true;
+    while (n > 0 && notendoffile) {
+        notendoffile = !std::getline(perfect_loading_decision_fh_, line).fail();
+        size_t idx = line.find(";");
+        if (idx == std::string::npos) {
+            std::cerr << "Unexpected input for perfect_loading_decision_file"
+                      << std::endl;
+        }
+        uint64_t base_address = std::stoull(line.substr(0, idx));
+        line.erase(0, idx + 1);
+        uint64_t mask = std::stoull(line);
+        base_address_to_blocks_mapping[base_address].merge(
+            get_blocks_base_and_size(mask, base_address));
+        n--;
+    }
+    return notendoffile;
+}
+
 std::pair<int, int>
 vcl_caching_device_t::start_and_end_oracle(addr_t address)
 {
     addr_t base_addr = address & _CACHELINE_BASEADDRESS_MASK;
     auto add_to_block_mapping = base_address_to_blocks_mapping.find(base_addr);
+    size_t exp_backoff = 2;
+    bool endoffile = false;
     while (add_to_block_mapping == base_address_to_blocks_mapping.end()) {
-        // read line and parse
-        // recheck if present
-        // endoffile: return (0, 64)
+        if (endoffile) {
+            return std::pair<int, int>(
+                0, 63); // we are at the end - not found - we should return 64
+        }
+        read_n_oracle_lines(exp_backoff);
+        add_to_block_mapping = base_address_to_blocks_mapping.find(base_addr);
+        exp_backoff *= 1.5;
     }
-    // IF found: check if block is present - otherwise jump back to parsing loop
-
-    return std::pair(-1, -1);
+    // currently going for min enclosing block
+    std::pair<addr_t, addr_t> candidate;
+    size_t min_block = 65;
+    for (const auto &block : add_to_block_mapping->second) {
+        if (block.first < address && address < block.second &&
+            block.second - block.first < min_block) {
+            candidate = block;
+        }
+    }
+    return candidate;
 }
 
 vcl_caching_device_t::~vcl_caching_device_t()
@@ -150,13 +209,17 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
             if (cache_block->offset_ <= start &&
                 end <= (cache_block->size_ + cache_block->offset_)) {
                 // hit
+
             } else {
                 // special miss handing - we need to lad partially
             }
         } else {
             // miss
             missed = true;
-            way = replace_which_way(block_idx, 64); // TODO: Fetch actual size from oracle
+            auto predicted_block = start_and_end_oracle(memref.data.addr);
+            way = replace_which_way(block_idx,
+                                    /* +1 for size */
+                                    predicted_block.second - predicted_block.first + 1);
         }
     }
 }
@@ -245,5 +308,5 @@ vcl_caching_device_t::record_access_stats(const _memref_t &memref, bool hit,
 std::pair<caching_device_block_t *, int>
 vcl_caching_device_t::find_caching_device_block(addr_t tag)
 {
-    return std::make_pair(new caching_device_block_t, -1);
+    return std::make_pair(nullptr, 0); // for now always miss
 }

@@ -259,6 +259,11 @@ config_reader_t::configure_cache(cache_params_t &cache)
                 ERRMSG("Error parsing line sizes list for VCL cache.\n");
                 return false;
             }
+        } else if (param == "perfect_block_predictor_file") {
+            if (!(*fin_ >> cache.block_size_prediction_file)) {
+                ERRMSG("Error parsing block predictor file\n");
+                return false;
+            }
         } else if (param == "size") {
             // Cache size in bytes.
             std::string size_str;
