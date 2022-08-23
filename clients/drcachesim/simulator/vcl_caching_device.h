@@ -134,19 +134,30 @@ protected:
     get_caching_device_block(int block_idx, int way) const override
     {
         // TODO;
-        return *this->blocks_[0];
+        return *(blocks_[block_idx + way]);
     }
 
     inline void
     invalidate_caching_device_block(caching_device_block_t *block) override
     {
-        // TODO
+        if (use_tag2block_table_) {
+            tag2block.erase(block->tag_);
+        }
+
+        block->tag_ = TAG_INVALID;
+        block->counter_ = 0;
     }
 
     inline void
     update_tag(caching_device_block_t *block, int way, addr_t new_tag) override
     {
-        // TODO
+        if (use_tag2block_table_) {
+            if (block->tag_ != TAG_INVALID) {
+                tag2block.erase(block->tag_);
+            }
+            tag2block[new_tag] = std::make_pair(block, way);
+        }
+        block->tag_ = new_tag;
     }
 
     // Returns the block (and its way) whose tag equals `tag`.

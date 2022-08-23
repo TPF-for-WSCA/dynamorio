@@ -2,6 +2,7 @@
 #include "../common/utils.h"
 #include <bits/basic_string.h>
 #include <math.h>
+#include <iterator>
 
 vcl_caching_device_t::vcl_caching_device_t(std::string perfect_fetch_file)
     : I_caching_device_t()
@@ -52,35 +53,50 @@ vcl_caching_device_t::read_n_oracle_lines(size_t n)
             get_blocks_base_and_size(mask, base_address));
         n--;
     }
-    return notendoffile;
+    return !notendoffile;
+}
+
+std::pair<addr_t, addr_t>
+get_candidate(const addr_t &address,
+              const std::set<std::pair<addr_t, addr_t>, AddrBlockCmp> &blocks)
+{
+    // currently going for min enclosing block
+    std::pair<addr_t, addr_t> candidate(0, 0);
+    size_t min_block = 65;
+    for (const auto &block : blocks) {
+        if (block.first <= address && address <= block.second &&
+            block.second - block.first < min_block) {
+            candidate = block;
+            min_block = block.second - block.first + 1;
+        }
+    }
+    return candidate;
 }
 
 std::pair<int, int>
 vcl_caching_device_t::start_and_end_oracle(addr_t address)
 {
     addr_t base_addr = address & _CACHELINE_BASEADDRESS_MASK;
-    auto add_to_block_mapping = base_address_to_blocks_mapping.find(base_addr);
-    size_t exp_backoff = 2;
+    auto add_to_block_mapping =
+        base_address_to_blocks_mapping.end(); // we want to eventually read the whole file
+    int64_t exp_backoff = 2;
     bool endoffile = false;
-    while (add_to_block_mapping == base_address_to_blocks_mapping.end()) {
+    auto candidate = std::pair<addr_t, addr_t>(0, 0);
+    while (add_to_block_mapping == base_address_to_blocks_mapping.end() ||
+           !(candidate.first <= address && address <= candidate.second)) {
         if (endoffile) {
             return std::pair<int, int>(
                 0, 63); // we are at the end - not found - we should return 64
         }
-        read_n_oracle_lines(exp_backoff);
-        add_to_block_mapping = base_address_to_blocks_mapping.find(base_addr);
-        exp_backoff *= 1.5;
+        endoffile = read_n_oracle_lines(exp_backoff);
+        add_to_block_mapping =
+            std::find(std::prev(base_address_to_blocks_mapping.end(), exp_backoff),
+                      base_address_to_blocks_mapping.end(), base_addr);
+        candidate = get_candidate(address, add_to_block_mapping->second);
+        exp_backoff *= 1.5; // read larger shares if we miss something
     }
-    // currently going for min enclosing block
-    std::pair<addr_t, addr_t> candidate(base_addr, base_addr + 64);
-    size_t min_block = 65;
-    for (const auto &block : add_to_block_mapping->second) {
-        if (block.first <= address && address <= block.second &&
-            block.second - block.first < min_block) {
-            candidate = block;
-        }
-    }
-    return candidate;
+
+    return std::pair<int, int>(candidate.first - base_addr, candidate.second - base_addr);
 }
 
 vcl_caching_device_t::~vcl_caching_device_t()
@@ -211,7 +227,7 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
                 // hit
 
             } else {
-                // special miss handing - we need to lad partially
+                // special miss handing - we need to load partially
             }
         } else {
             // miss
