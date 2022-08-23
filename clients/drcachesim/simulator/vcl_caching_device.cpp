@@ -89,11 +89,10 @@ vcl_caching_device_t::start_and_end_oracle(addr_t address)
                 0, 63); // we are at the end - not found - we should return 64
         }
         endoffile = read_n_oracle_lines(exp_backoff);
-        add_to_block_mapping =
-            std::find(std::prev(base_address_to_blocks_mapping.end(), exp_backoff),
-                      base_address_to_blocks_mapping.end(), base_addr);
-        candidate = get_candidate(address, add_to_block_mapping->second);
+        add_to_block_mapping = base_address_to_blocks_mapping.find(base_addr);
         exp_backoff *= 1.5; // read larger shares if we miss something
+        if (add_to_block_mapping != base_address_to_blocks_mapping.end())
+            candidate = get_candidate(address, add_to_block_mapping->second);
     }
 
     return std::pair<int, int>(candidate.first - base_addr, candidate.second - base_addr);
@@ -153,7 +152,7 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
     block_size_ = *(std::max_element(way_sizes.begin(), way_sizes.end()));
     num_blocks_ = num_blocks;
     loaded_blocks_ = 0;
-    num_sets_ = num_blocks_ / associativity;
+    sets_in_cache_ = num_blocks_ / associativity;
     set_idx_mask_ = sets_in_cache_ - 1;
     assoc_bits_ = std::ceil(
         std::log2(associativity_)); // TODO: Why do we need power of 2 number of ways?
@@ -212,7 +211,7 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
                 memref.data.addr; // is this good enough?
         }
 
-        auto block_way = find_caching_device_block(tag);
+        auto block_way = find_caching_device_block(memref.data.addr);
         if (block_way.first != nullptr) {
             // found - check if in range
             vcl_caching_device_block_t *cache_block =
@@ -276,13 +275,7 @@ vcl_caching_device_t::replace_which_way(int block_idx)
 int
 vcl_caching_device_t::replace_which_way(int block_idx, int size)
 {
-    int first_viable_way;
-    for (size_t i = 0; i < block_sizes_.size(); ++i) {
-        if (block_sizes_[i] > size) {
-            first_viable_way = i;
-            break;
-        }
-    }
+    int first_viable_way = get_smallest_possible_way(size);
 
     // For now we simply do lru over the large enough entries
     int max_way = 0;
@@ -322,7 +315,19 @@ vcl_caching_device_t::record_access_stats(const _memref_t &memref, bool hit,
 }
 
 std::pair<caching_device_block_t *, int>
-vcl_caching_device_t::find_caching_device_block(addr_t tag)
+vcl_caching_device_t::find_caching_device_block(addr_t addr)
 {
+    addr_t tag = compute_tag(addr);
+    addr_t blockidx = compute_block_idx(tag);
+    for (int way = 0; way < associativity_; ++way) {
+        vcl_caching_device_block_t *block =
+            (vcl_caching_device_block_t *)&get_caching_device_block(blockidx, way);
+        // TODO: Check if < or <=
+        addr_t startaddr = (addr & _CACHELINE_BASEADDRESS_MASK) + block->offset_;
+        addr_t endaddr = startaddr + block->size_;
+        if (block->tag_ == tag && startaddr < addr && addr <= endaddr) {
+            return std::make_pair(block, way);
+        }
+    }
     return std::make_pair(nullptr, 0); // for now always miss
 }

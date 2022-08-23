@@ -67,7 +67,10 @@ cache_t::init(int associativity, std::vector<int> line_sizes, int total_size,
               snoop_filter_t *snoop_filter,
               const std::vector<I_caching_device_t *> &children)
 {
-    int num_sets = total_size / std::accumulate(line_sizes.begin(), line_sizes.end(), 0);
+    // TODO: How to adjust such that the cache size is nicely divisible by the set size
+    // e.g. largest line is 64, was a 8 way cache: we still have size / 8*8
+    int setsize = std::accumulate(line_sizes.begin(), line_sizes.end(), 0);
+    int num_sets = total_size / setsize;
     return self_->init(associativity, line_sizes, num_sets, parent, stats, prefetcher,
                        inclusive, coherent_cache, id, snoop_filter, children);
 }

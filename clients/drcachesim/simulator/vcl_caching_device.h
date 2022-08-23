@@ -118,8 +118,7 @@ protected:
     inline addr_t
     compute_tag(addr_t addr) const override
     {
-        // look up next branch
-        return 0;
+        return addr >> block_size_bits_;
     }
     inline int
     compute_block_idx(addr_t tag) const override
@@ -133,7 +132,6 @@ protected:
     inline caching_device_block_t &
     get_caching_device_block(int block_idx, int way) const override
     {
-        // TODO;
         return *(blocks_[block_idx + way]);
     }
 
@@ -146,6 +144,19 @@ protected:
 
         block->tag_ = TAG_INVALID;
         block->counter_ = 0;
+    }
+
+    inline int
+    get_smallest_possible_way(int size)
+    {
+        int first_viable_way;
+        for (size_t i = 0; i < block_sizes_.size(); ++i) {
+            if (block_sizes_[i] >= size) {
+                first_viable_way = i;
+                break;
+            }
+        }
+        return first_viable_way;
     }
 
     inline void

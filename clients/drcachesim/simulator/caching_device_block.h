@@ -69,9 +69,9 @@ public:
     // A 32-bit counter should be sufficient but we may want to revisit.
     // We already have stdint.h so we can reinstate int_least64_t easily.
     int counter_; // for use by replacement policies
-    int size_;    // block size in bytes - depend on the way the block belongs to for vcl,
+    uint size_;   // block size in bytes - depend on the way the block belongs to for vcl,
                   // but same for non-vcl
-    int offset_;  // depends where cb starts / always 0 for non-vcl
+    uint offset_; // depends where cb starts / always 0 for non-vcl
 };
 
 #endif /* _CACHING_DEVICE_BLOCK_H_ */
