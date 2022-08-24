@@ -103,8 +103,6 @@ public:
     }
 
 protected:
-    virtual void
-    access_update(int block_idx, int way) override;
     virtual int
     replace_which_way(int block_idx) override;
     int
@@ -125,7 +123,7 @@ protected:
     compute_block_idx(addr_t tag) const override
     {
 #ifdef _VCL_WAY_EXTENSION
-        return (tag & set_idx_mask_) << assoc_bits_;
+        return (tag & set_idx_mask_) * block_sizes_.size();
 #else // _VCL_SET_EXTENSION
         return -1; // todo
 #endif
@@ -170,12 +168,16 @@ protected:
             tag2block[new_tag] = std::make_pair(block, way);
         }
         block->tag_ = new_tag;
+        block->validity_ = true;
     }
 
     // Returns the block (and its way) whose tag equals `tag`.
     // Returns <nullptr,0> if there is no such block.
     virtual std::pair<caching_device_block_t *, int>
     find_caching_device_block(addr_t tag) override;
+
+    virtual std::vector<std::pair<caching_device_block_t *, int>>
+    find_all_caching_device_blocks(addr_t addr, bool only_one = false);
 
     // a pure virtual function for subclasses to initialize their own block array
     virtual void

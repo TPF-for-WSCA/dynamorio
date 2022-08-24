@@ -56,6 +56,7 @@ public:
         , counter_(0)
         , size_(-1)
         , offset_(0)
+        , validity_(false)
     {
     }
     // Destructor must be virtual and default is not.
@@ -72,6 +73,7 @@ public:
     uint size_;   // block size in bytes - depend on the way the block belongs to for vcl,
                   // but same for non-vcl
     uint offset_; // depends where cb starts / always 0 for non-vcl
+    bool validity_; // validity bit for more complex cache organizations
 };
 
 #endif /* _CACHING_DEVICE_BLOCK_H_ */

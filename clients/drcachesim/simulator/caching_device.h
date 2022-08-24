@@ -126,8 +126,6 @@ public:
         return block_idx;
     }
 
-    virtual void
-    access_update(int block_idx, int way) override;
     virtual int
     replace_which_way(int block_idx) override;
     virtual int

@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cache.h"
 #include "caching_device_block.h"
 #include "basic_block_stats.h"
 #include "memref.h"
@@ -76,8 +77,9 @@ public:
     virtual int
     get_block_index(const addr_t addr) const = 0;
 
-    virtual void
-    access_update(int block_idx, int way) {};
+    void
+    access_update(int block_idx, int way);
+
     virtual int
     replace_which_way(int block_idx)
     {

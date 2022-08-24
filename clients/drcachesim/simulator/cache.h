@@ -90,12 +90,13 @@ public:
 
     I_caching_device_t *self_;
 
+    virtual void
+    access_update(int block_idx, int way);
+
 protected:
     void
     init_blocks();
 
-    virtual void
-    access_update(int block_idx, int way);
     virtual int
     replace_which_way(int block_idx);
     virtual int

@@ -266,13 +266,6 @@ caching_device_t::request(const memref_t &memref_in)
     }
 }
 
-void
-caching_device_t::access_update(int block_idx, int way)
-{
-    // We just inc the counter for LFU.  We live with any blip on overflow.
-    get_caching_device_block(block_idx, way).counter_++;
-}
-
 int
 caching_device_t::replace_which_way(int block_idx)
 {

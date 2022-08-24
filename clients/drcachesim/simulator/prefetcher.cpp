@@ -44,7 +44,7 @@ prefetcher_t::prefetcher_t(int block_size)
 }
 
 void
-prefetcher_t::prefetch(caching_device_t *cache, const memref_t &memref_in)
+prefetcher_t::prefetch(I_caching_device_t *cache, const memref_t &memref_in)
 {
     // We implement a simple next-line prefetcher.
     memref_t memref = memref_in;
