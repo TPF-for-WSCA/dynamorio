@@ -48,6 +48,7 @@
 #include "cache_fifo.h"
 #include "cache_simulator.h"
 #include "droption.h"
+#include <numeric>
 
 #include "snoop_filter.h"
 
@@ -336,11 +337,15 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         auto config = cache_params[cache_name];
         bool cache_initialized = false;
         if (cache->self_->vcl_enabled()) {
-            cache_initialized = cache->init(
-                (int)cache_config.assoc, config.line_sizes, (int)cache_config.size,
-                parent_device, stats_collector, nullptr /*prefetcher*/,
-                cache_config.inclusive, is_coherent_, is_snooped ? snoop_id : -1,
-                is_snooped ? snoop_filter_ : nullptr, children);
+            config.size =
+                (std::accumulate(config.line_sizes.begin(), config.line_sizes.end(), 0) *
+                 config.num_sets);
+            cache_initialized =
+                cache->init((int)config.line_sizes.size(), config.line_sizes,
+                            (int)cache_config.num_sets, parent_device, stats_collector,
+                            nullptr /*prefetcher*/, cache_config.inclusive, is_coherent_,
+                            is_snooped ? snoop_id : -1,
+                            is_snooped ? snoop_filter_ : nullptr, children);
         } else {
             cache_initialized = cache->init(
                 (int)cache_config.assoc, (int)knobs_.line_size, (int)cache_config.size,

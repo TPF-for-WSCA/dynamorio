@@ -115,6 +115,7 @@ protected:
     record_access_stats(const memref_t &memref, bool hit,
                         caching_device_block_t *cache_block) override;
 
+    // TODO: How to fix tag calculation if we dont yet know size of the way
     inline addr_t
     compute_tag(addr_t addr) const override
     {

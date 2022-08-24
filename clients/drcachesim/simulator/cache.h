@@ -54,8 +54,30 @@ public:
          bool inclusive = false, bool coherent_cache = false, int id_ = -1,
          snoop_filter_t *snoop_filter_ = nullptr,
          const std::vector<I_caching_device_t *> &children = {});
+
+    /**
+     * @brief Initialize the cache and the VCL contained caching device. A device can only
+     * be used after initialization, before its initialization the behaviour is undefined
+     *
+     * @param associativity The number of ways in our set associative cache
+     * @param line_sizes The sizes of the different ways
+     * @param num_sets The number of sets this cache contains (total size =
+     * sum(line_sizes) * num_sets)
+     * @param parent The parent cache
+     * @param stats The statistics collector for this cache
+     * @param prefetcher The prefetcher that prefetches into this cache
+     * @param inclusive Indicate whether this cache is configured to be inclusive or
+     * exclusive
+     * @param coherent_cache Define the Coherency behaviour of the cache
+     * @param id_ ID
+     * @param snoop_filter_ Handle and issue snooping requests
+     * @param children Lower level caches
+     * @return true: if the cache has been successfully initialized;
+     * @return false: if there has been an error during initialization. Please check the
+     * logs
+     */
     virtual bool
-    init(int associativity, std::vector<int> line_sizes, int total_size,
+    init(int associativity, std::vector<int> line_sizes, int num_sets,
          I_caching_device_t *parent, caching_device_stats_t *stats,
          prefetcher_t *prefetcher = nullptr, bool inclusive = false,
          bool coherent_cache = false, int id_ = -1,

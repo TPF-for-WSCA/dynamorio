@@ -134,13 +134,13 @@ vcl_caching_device_t::init(int associativity, int block_size, int num_blocks,
 }
 
 bool
-vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int num_blocks,
+vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int num_sets,
                            I_caching_device_t *parent, caching_device_stats_t *stats,
                            prefetcher_t *prefetcher, bool inclusive, bool coherent_cache,
                            int id, snoop_filter_t *snoop_filter,
                            const std::vector<I_caching_device_t *> &children)
 {
-    if (!IS_POWER_OF_2(associativity))
+    if (!IS_POWER_OF_2(num_sets))
         return false;
     if (stats == NULL)
         return false;
@@ -150,9 +150,9 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
     associativity_ = associativity;
     block_sizes_ = way_sizes;
     block_size_ = *(std::max_element(way_sizes.begin(), way_sizes.end()));
-    num_blocks_ = num_blocks;
+    sets_in_cache_ = num_sets;
+    num_blocks_ = num_sets * associativity;
     loaded_blocks_ = 0;
-    sets_in_cache_ = num_blocks_ / associativity;
     set_idx_mask_ = sets_in_cache_ - 1;
     assoc_bits_ = std::ceil(
         std::log2(associativity_)); // TODO: Why do we need power of 2 number of ways?
@@ -173,9 +173,9 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
     id_ = id;
     snoop_filter_ = snoop_filter;
     coherent_cache_ = coherent_cache;
-    // TODO: check that - we need correctly sized blocks
     blocks_ = (caching_device_block_t **)new vcl_caching_device_block_t *[num_blocks_];
 
+    init_blocks();
     // initialize block sizes
     int way_count = 1;
     for (const auto &block_size : block_sizes_) {
@@ -183,8 +183,8 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
              i++) {
             ((vcl_caching_device_block_t *)blocks_[i])->size_ = block_size;
         }
+        way_count += 1;
     }
-    init_blocks();
     last_tag_ = TAG_INVALID;
     inclusive_ = inclusive;
     children_ = children;

@@ -52,6 +52,7 @@ struct cache_params_t {
     cache_params_t()
         : type(CACHE_TYPE_UNIFIED)
         , core(-1)
+        , num_sets(0)
         , size(0)
         , assoc(0)
         , inclusive(false)
@@ -70,6 +71,10 @@ struct cache_params_t {
     // CPU core this cache is associated with.
     // Must be specified for L1 caches only.
     int core;
+    // The number of sets a cache shuld have. Must be a power of 2
+    // For non-VCL caches this value is computed. For VCL caches
+    // this must be set.
+    int num_sets;
     // Cache size in bytes.
     uint64_t size;
     // Cache associativity. Must be a power of 2.
