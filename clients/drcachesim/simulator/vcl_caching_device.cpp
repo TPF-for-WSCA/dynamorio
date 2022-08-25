@@ -348,7 +348,10 @@ vcl_caching_device_t::replace_which_way(int block_idx)
 int
 vcl_caching_device_t::replace_which_way(int block_idx, int size)
 {
-    int first_viable_way = get_smallest_possible_way(size);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+    int first_viable_way = 0;
+    first_viable_way = get_smallest_possible_way(size);
 
     // For now we simply do lru over the large enough entries
     int max_way = 0;
@@ -372,6 +375,7 @@ vcl_caching_device_t::replace_which_way(int block_idx, int size)
         }
     }
     return max_way;
+#pragma GCC diagnostic pop
 }
 
 int
