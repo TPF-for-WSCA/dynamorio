@@ -4,6 +4,7 @@
 #include <bits/basic_string.h>
 #include <math.h>
 #include <iterator>
+#include "cache.h"
 
 vcl_caching_device_t::vcl_caching_device_t(std::string perfect_fetch_file)
     : I_caching_device_t()
@@ -231,17 +232,18 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
                 uint8_t end = start + memref.data.size;
                 if (cache_block->validity_ && cache_block->offset_ <= start &&
                     end <= (cache_block->size_ + cache_block->offset_)) {
-                    // hit
+                    // TODO: hit
+                    record_access_stats(memref, true, cache_block);
                 } else if (cache_block->validity_ && cache_block->offset_ <= start &&
                            start <= (cache_block->size_ + cache_block->offset_)) {
-                    // we overlap partially - handle non-stored part
+                    // we overlap partially - handle non-stored part [DONE]
                     memref.data.addr =
                         baseaddr + cache_block->offset_ + cache_block->size_;
                     memref.data.size = memref.data.size -
                         (cache_block->offset_ + cache_block->size_ - start);
                     missed = true;
                 } else {
-                    // we do not overlap - handle a miss
+                    // we do not overlap - handle a miss [DONE]
                     missed = true;
                 }
             }
@@ -297,7 +299,7 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
             update_tag(cache_block, way, tag);
         }
 
-        access_update(block_idx, way);
+        ((cache_t *)cache_)->access_update(block_idx, way);
 
         if (missed && !type_is_prefetch(memref.data.type) && prefetcher_ != nullptr) {
             prefetcher_->prefetch(this, memref);
@@ -314,22 +316,26 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
 void
 vcl_caching_device_t::invalidate(addr_t tag, invalidation_type_t invalidation_type_)
 {
+    throw std::runtime_error("invalidate not yet implemented");
 }
 
 bool
 vcl_caching_device_t::contains_tag(addr_t tag)
 {
+    throw std::runtime_error("contains_tag not yet implemented");
     return false;
 }
 
 void
 vcl_caching_device_t::propagate_eviction(addr_t tag, const I_caching_device_t *requester)
 {
+    throw std::runtime_error("propagate_eviction not yet implemented");
 }
 
 void
 vcl_caching_device_t::propagate_write(addr_t tag, const I_caching_device_t *requester)
 {
+    throw std::runtime_error("propagate_write not yet implemented");
 }
 
 int
@@ -371,6 +377,7 @@ vcl_caching_device_t::replace_which_way(int block_idx, int size)
 int
 vcl_caching_device_t::get_next_way_to_replace(const int block_idx) const
 {
+    throw std::runtime_error("get_next_way_to_replace not yet implemented");
     return -1;
 }
 
@@ -379,6 +386,15 @@ void
 vcl_caching_device_t::record_access_stats(const _memref_t &memref, bool hit,
                                           caching_device_block_t *cache_block)
 {
+    stats_->access(memref, hit, cache_block);
+
+    if (hit) {
+        for (I_caching_device_t *up = parent_; up != nullptr; up = up->parent_) {
+            up->stats_->child_access(memref, hit, cache_block);
+        }
+    } else if (parent_ != nullptr) {
+        parent_->stats_->child_access(memref, hit, cache_block);
+    }
 }
 std::vector<std::pair<caching_device_block_t *, int>>
 vcl_caching_device_t::find_all_caching_device_blocks(addr_t addr, bool only_one)

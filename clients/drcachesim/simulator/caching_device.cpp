@@ -37,6 +37,7 @@
 #include "snoop_filter.h"
 #include "../common/utils.h"
 #include <assert.h>
+#include "cache.h"
 
 caching_device_t::caching_device_t()
     : I_caching_device_t()
@@ -160,7 +161,7 @@ caching_device_t::request(const memref_t &memref_in)
             &get_caching_device_block(last_block_idx_, last_way_);
         assert(tag != TAG_INVALID && tag == cache_block->tag_);
         record_access_stats(memref_in, true /*hit*/, cache_block);
-        access_update(last_block_idx_, last_way_);
+        ((cache_t *)cache_)->access_update(last_block_idx_, last_way_);
         return;
     }
 
@@ -246,7 +247,7 @@ caching_device_t::request(const memref_t &memref_in)
             update_tag(cache_block, way, tag);
         }
 
-        access_update(block_idx, way);
+        ((cache_t *)cache_)->access_update(block_idx, way);
 
         // Issue a hardware prefetch, if any, before we remember the last tag,
         // so we remember this line and not the prefetched line.

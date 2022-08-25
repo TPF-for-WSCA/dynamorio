@@ -6,7 +6,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cache.h"
 #include "caching_device_block.h"
 #include "basic_block_stats.h"
 #include "memref.h"
@@ -20,7 +19,7 @@ public:
         : blocks_(NULL)
         , stats_(NULL)
         , prefetcher_(NULL)
-        , cache_(NULL)
+        , cache_(nullptr)
         // The tag being hashed is already right-shifted to the cache line and
         // an identity hash is plenty good enough and nice and fast.
         // We set the size and load factor only if being used, in set_hashtable_use().
@@ -76,9 +75,6 @@ public:
     set_hashtable_use(bool use_hashtable) = 0;
     virtual int
     get_block_index(const addr_t addr) const = 0;
-
-    void
-    access_update(int block_idx, int way);
 
     virtual int
     replace_which_way(int block_idx)

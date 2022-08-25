@@ -33,6 +33,7 @@
 #include "tlb.h"
 #include "../common/utils.h"
 #include <assert.h>
+#include "cache.h"
 
 void
 tlb_t::init_blocks()
@@ -72,7 +73,7 @@ tlb_t::request(const memref_t &memref_in)
         assert(tag != TAG_INVALID && tag == tlb_entry->tag_ &&
                pid == ((tlb_entry_t *)tlb_entry)->pid_);
         record_access_stats(memref_in, true /*hit*/, tlb_entry);
-        access_update(last_block_idx_, last_way_);
+        ((cache_t *)cache_)->access_update(last_block_idx_, last_way_);
         return;
     }
 
@@ -107,7 +108,7 @@ tlb_t::request(const memref_t &memref_in)
             ((tlb_entry_t *)tlb_entry)->pid_ = pid;
         }
 
-        access_update(block_idx, way);
+        ((cache_t *)cache_)->access_update(block_idx, way);
 
         if (tag + 1 <= final_tag) {
             addr_t next_addr = (tag + 1) << block_size_bits_;
