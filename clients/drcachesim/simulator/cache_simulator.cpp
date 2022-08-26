@@ -49,6 +49,7 @@
 #include "cache_simulator.h"
 #include "droption.h"
 #include <numeric>
+#include <sys/stat.h>
 
 #include "snoop_filter.h"
 
@@ -141,6 +142,12 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
         snooped_caches_[(2 * i) + 1] = l1_dcaches_[i];
         std::string output_dir = op_data_dir.get_value() + "/" +
             std::to_string(knobs_.sim_refs) + "/" + std::to_string(knobs_.L1I_size);
+        struct stat buffer;
+        if (stat(output_dir.c_str(), &buffer) != 0) {
+            error_string_ = "experiment already ran - returning early";
+            success_ = false;
+            return;
+        }
         if (!l1_icaches_[i]->cache_t::init(
                 knobs_.L1I_assoc, (int)knobs_.line_size, (int)knobs_.L1I_size, llc->self_,
                 new basic_block_stats_t((int)knobs_.line_size, "", output_dir,
@@ -320,6 +327,12 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
             std::to_string(knobs_.sim_refs) + "/" + std::to_string(cache_config.size);
         caching_device_stats_t *stats_collector;
         if (cache_config.type.compare("instruction") == 0) {
+            struct stat buffer;
+            if (stat(output_dir.c_str(), &buffer) == 0) {
+                error_string_ = "experiment already ran - returning early";
+                success_ = false;
+                return;
+            }
             stats_collector =
                 new basic_block_stats_t((int)knobs_.line_size, cache_config.miss_file,
                                         output_dir, warmup_enabled_, is_coherent_);
