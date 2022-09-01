@@ -50,6 +50,7 @@
 #include "droption.h"
 #include <numeric>
 #include <sys/stat.h>
+#include <filesystem>
 
 #include "snoop_filter.h"
 
@@ -142,8 +143,7 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
         snooped_caches_[(2 * i) + 1] = l1_dcaches_[i];
         std::string output_dir = op_data_dir.get_value() + "/" +
             std::to_string(knobs_.sim_refs) + "/" + std::to_string(knobs_.L1I_size);
-        struct stat buffer;
-        if (stat(output_dir.c_str(), &buffer) != 0 && !knobs_.overwrite_prev_results) {
+        if (!(std::filesystem::is_empty(output_dir) || knobs_.overwrite_prev_results)) {
             error_string_ = "experiment already ran - returning early";
             success_ = false;
             return;
@@ -327,9 +327,8 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
             std::to_string(knobs_.sim_refs) + "/" + std::to_string(cache_config.size);
         caching_device_stats_t *stats_collector;
         if (cache_config.type.compare("instruction") == 0) {
-            struct stat buffer;
-            if (stat(output_dir.c_str(), &buffer) == 0 &&
-                !knobs_.overwrite_prev_results) {
+            if (!(std::filesystem::is_empty(output_dir) ||
+                  knobs_.overwrite_prev_results)) {
                 error_string_ = "experiment already ran - returning early";
                 success_ = false;
                 return;
