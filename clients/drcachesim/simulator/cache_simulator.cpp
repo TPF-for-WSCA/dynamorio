@@ -143,7 +143,7 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
         std::string output_dir = op_data_dir.get_value() + "/" +
             std::to_string(knobs_.sim_refs) + "/" + std::to_string(knobs_.L1I_size);
         struct stat buffer;
-        if (stat(output_dir.c_str(), &buffer) != 0) {
+        if (stat(output_dir.c_str(), &buffer) != 0 && !knobs_.overwrite_prev_results) {
             error_string_ = "experiment already ran - returning early";
             success_ = false;
             return;
@@ -328,7 +328,8 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         caching_device_stats_t *stats_collector;
         if (cache_config.type.compare("instruction") == 0) {
             struct stat buffer;
-            if (stat(output_dir.c_str(), &buffer) == 0) {
+            if (stat(output_dir.c_str(), &buffer) == 0 &&
+                !knobs_.overwrite_prev_results) {
                 error_string_ = "experiment already ran - returning early";
                 success_ = false;
                 return;

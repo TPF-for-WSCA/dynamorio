@@ -134,7 +134,6 @@ public:
     // correctly by base class pointers.
     caching_device_block_t **blocks_;
     int num_sets_;
-    int sets_in_cache_;
     int associativity_;
     int block_size_;
     // len of block_sizes_ needs to be equal associativity

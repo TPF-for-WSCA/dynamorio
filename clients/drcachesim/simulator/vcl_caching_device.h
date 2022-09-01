@@ -142,9 +142,9 @@ protected:
         }
 
         block->tag_ = TAG_INVALID;
+        block->validity_ = false;
         block->counter_ = 0;
     }
-
     inline int
     get_smallest_possible_way(int size)
     {
@@ -176,7 +176,8 @@ protected:
     virtual std::pair<caching_device_block_t *, int>
     find_caching_device_block(addr_t tag) override;
     std::vector<std::pair<caching_device_block_t *, int>>
-    find_all_caching_device_blocks(addr_t addr, bool only_one = false);
+    find_all_caching_device_blocks(addr_t addr, bool only_one = false,
+                                   bool check_inlier = true);
     // a pure virtual function for subclasses to initialize their own block array
     virtual void
     init_blocks() override;

@@ -173,6 +173,13 @@ droption_t<std::string> op_perfect_block_predictor(
     "cache blocks and the contained useful bytes. The strategy used to extract "
     "the perfect block predictor has currently to be changed in code.");
 
+droption_t<bool> op_overwrite_prev_results(
+    DROPTION_SCOPE_ALL, "overwrite_previous_results", false,
+    "Ignore previous results that might be in the data directory",
+    "If set to true, the tool will overwrite previous result files that might reside "
+    "in the same directory. If set to false, the tool will not run and notify you that "
+    "there is data already present.");
+
 droption_t<bool> op_L0_filter_deprecated(
     DROPTION_SCOPE_CLIENT, "L0_filter", false,
     "Filter out first-level instruction and data cache hits during tracing",

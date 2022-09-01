@@ -326,7 +326,10 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
 
     bool aliasing_eviction = (is_adjacent_instr && !hit && prev_hit);
 
-    is_fresh = prev_cacheline_base_address != curr_cacheline_base_address && !hit;
+    // if it is not fresh now, but it is the same address and not a hit we had an eviction
+    // AND this is freshly brought in
+    is_fresh =
+        (prev_cacheline_base_address != curr_cacheline_base_address || !is_fresh) && !hit;
 
     // We do not orient ourselves at branches but only at cacheline base_addresses
     // and corresponding jumps
@@ -580,11 +583,11 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
             auto last_presence = presences.back();
             auto total_accesses = get_total_mask_for_presence(last_presence);
             perfect_fetch_history[prev_idx] = std::pair(base_addr, total_accesses);
+        } else {
+            // compulsory miss
+            perfect_fetch_history.push_back(std::pair(base_addr, 0));
+            eviction_to_fetch_index_map[base_addr] = perfect_fetch_history.size() - 1;
         }
-        // ELSE: This is a compulsory miss
-
-        perfect_fetch_history.push_back(std::pair(base_addr, 0));
-        eviction_to_fetch_index_map[base_addr] = perfect_fetch_history.size() - 1;
     }
     // if (handled_instructions % ANALYSED_INSTRUCTIONS_PER_ITERATION == 0) {
     //     std::ostringstream oss;

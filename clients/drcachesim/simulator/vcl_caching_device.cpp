@@ -50,7 +50,7 @@ vcl_caching_device_t::read_n_oracle_lines(size_t n)
         if (idx == std::string::npos) {
             std::cerr << "Unexpected input for perfect_loading_decision_file"
                       << std::endl;
-            return false;
+            return true;
         }
         uint64_t base_address = std::stoull(line.substr(0, idx));
         line.erase(0, idx + 1);
@@ -156,10 +156,10 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
     associativity_ = associativity;
     block_sizes_ = way_sizes;
     block_size_ = *(std::max_element(way_sizes.begin(), way_sizes.end()));
-    sets_in_cache_ = num_sets;
+    num_sets_ = num_sets;
     num_blocks_ = num_sets * associativity;
     loaded_blocks_ = 0;
-    set_idx_mask_ = sets_in_cache_ - 1;
+    set_idx_mask_ = num_sets_ - 1;
     assoc_bits_ = std::ceil(
         std::log2(associativity_)); // TODO: Why do we need power of 2 number of ways?
     block_sizes_bits_.reserve(block_sizes_.size());
@@ -183,13 +183,12 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
 
     init_blocks();
     // initialize block sizes
-    int way_count = 1;
-    for (const auto &block_size : block_sizes_) {
-        for (int i = (way_count - 1) * sets_in_cache_; i < way_count * sets_in_cache_;
-             i++) {
-            ((vcl_caching_device_block_t *)blocks_[i])->size_ = block_size;
+    for (int curr_set = 0; curr_set < num_sets_; curr_set++) {
+        for (size_t curr_way = 0; curr_way < block_sizes_.size(); curr_way++) {
+            ((vcl_caching_device_block_t *)
+                 blocks_[curr_set * block_sizes_.size() + curr_way])
+                ->size_ = block_sizes_[curr_way];
         }
-        way_count += 1;
     }
     last_tag_ = TAG_INVALID;
     inclusive_ = inclusive;
@@ -217,26 +216,33 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
                 memref.data.addr; // is this good enough?
         }
 
+        addr_t baseaddr = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
+        uint8_t start = memref.data.addr - baseaddr;
+        uint8_t end = start + memref.data.size - 1; // last bytes offset
         auto block_ways = find_all_caching_device_blocks(memref.data.addr);
+        vcl_caching_device_block_t *cache_block = nullptr;
         if (block_ways.size() > 0) {
             // found - check if in range
             for (auto &block_way : block_ways) {
                 // We can ever hit in one - we ensure this by not inserting overlapping
                 // regions
-                vcl_caching_device_block_t *cache_block =
+                cache_block =
                     (vcl_caching_device_block_t *)
                         block_way.first; // we only store vcl blocks in vcl cache
                 way = block_way.second;
-                addr_t baseaddr = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
-                uint8_t start = memref.data.addr - baseaddr;
-                uint8_t end = start + memref.data.size;
                 if (cache_block->validity_ && cache_block->offset_ <= start &&
                     end <= (cache_block->size_ + cache_block->offset_)) {
                     // TODO: hit
-                    record_access_stats(memref, true, cache_block);
+                    missed = false;
+
+                    break;
                 } else if (cache_block->validity_ && cache_block->offset_ <= start &&
-                           start <= (cache_block->size_ + cache_block->offset_)) {
+                           start < (cache_block->size_ + cache_block->offset_)) {
                     // we overlap partially - handle non-stored part [DONE]
+                    // NOTE: This should not happen
+                    std::cout << "We found a mid-instruction block ending / instr.addr: "
+                              << memref.data.addr << " / base_address: " << baseaddr
+                              << std::endl;
                     memref.data.addr =
                         baseaddr + cache_block->offset_ + cache_block->size_;
                     memref.data.size = memref.data.size -
@@ -258,9 +264,8 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
             way = replace_which_way(block_idx,
                                     /* +1 for size */
                                     predicted_block.second - predicted_block.first + 1);
-            vcl_caching_device_block_t *cache_block =
+            cache_block =
                 (vcl_caching_device_block_t *)&get_caching_device_block(block_idx, way);
-            record_access_stats(memref, false, cache_block);
             if (parent_ != NULL) {
                 parent_->request(memref);
             }
@@ -297,7 +302,12 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
                 }
             }
             update_tag(cache_block, way, tag);
+            uint8_t max_offset = 64 - cache_block->size_;
+            // we will not start later in the cacheline than that
+            cache_block->offset_ = std::min(start, max_offset);
         }
+
+        record_access_stats(memref, !missed, cache_block);
 
         ((cache_t *)cache_)->access_update(block_idx, way);
 
@@ -316,7 +326,22 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
 void
 vcl_caching_device_t::invalidate(addr_t tag, invalidation_type_t invalidation_type_)
 {
-    throw std::runtime_error("invalidate not yet implemented");
+    auto all_affected_blocks_way =
+        find_all_caching_device_blocks((tag << block_size_bits_), false, false);
+    if (all_affected_blocks_way.size() > 0) {
+        for (auto &block_way : all_affected_blocks_way) {
+            invalidate_caching_device_block(block_way.first);
+            stats_->invalidate(
+                invalidation_type_); // should we count this per invalidation request or
+                                     // per invalidated block?
+        }
+        if (invalidation_type_ == INVALIDATION_INCLUSIVE && inclusive_ &&
+            !children_.empty()) {
+            for (auto &child : children_) {
+                child->invalidate(tag, invalidation_type_);
+            }
+        }
+    }
 }
 
 bool
@@ -401,7 +426,8 @@ vcl_caching_device_t::record_access_stats(const _memref_t &memref, bool hit,
     }
 }
 std::vector<std::pair<caching_device_block_t *, int>>
-vcl_caching_device_t::find_all_caching_device_blocks(addr_t addr, bool only_one)
+vcl_caching_device_t::find_all_caching_device_blocks(addr_t addr, bool only_one,
+                                                     bool check_inlier)
 {
     addr_t tag = compute_tag(addr);
     addr_t blockidx = compute_block_idx(tag);
@@ -412,7 +438,8 @@ vcl_caching_device_t::find_all_caching_device_blocks(addr_t addr, bool only_one)
         // TODO: Check if < or <=
         addr_t startaddr = (addr & _CACHELINE_BASEADDRESS_MASK) + block->offset_;
         addr_t endaddr = startaddr + block->size_;
-        if (block->tag_ == tag && startaddr < addr && addr <= endaddr) {
+        if ((block->tag_ == tag && startaddr < addr && addr <= endaddr) ||
+            !check_inlier) {
             candidate_blocks.push_back(std::make_pair(block, way));
             if (only_one)
                 return candidate_blocks; // we only get here once before returning
