@@ -1,12 +1,13 @@
 // Configuration for a single-core CPU.
  
 // Common params.
-num_cores       1
-line_size       64
-cpu_scheduling  true
-sim_refs        1000000000000
-warmup_fraction 0.001
-data_dir        /home/robrunne/Workspace/TracesDatasets/Google/charlie/trace-1/
+num_cores                       1
+line_size                       64
+cpu_scheduling                  true
+sim_refs                        1000000000000
+warmup_fraction                 0.001
+data_dir                        /home/robrunne/Workspace/TracesDatasets/Google/charlie/trace-1/
+write_perfect_size_prediction   false
 
 // Cache params.
 P0L1I {                        // P0 L1 instruction cache

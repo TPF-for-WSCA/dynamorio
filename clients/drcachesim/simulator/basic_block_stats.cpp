@@ -501,6 +501,12 @@ basic_block_stats_t::handle_interrupt(const memref_t &memref, bool hit)
 }
 
 void
+basic_block_stats_t::set_perfect_size_tracer(bool val)
+{
+    this->perfect_block_size_trace_enabled = val;
+}
+
+void
 basic_block_stats_t::access(const memref_t &memref, bool hit,
                             caching_device_block_t *cache_block)
 {
@@ -570,7 +576,7 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         handle_interrupt(memref, hit);
     }
 
-    if (!hit) {
+    if (!hit && perfect_block_size_trace_enabled) {
         auto base_addr = memref.instr.addr & cache_line_address_mask;
         auto it = eviction_to_fetch_index_map.find(base_addr);
         int prev_idx = -1;
@@ -911,33 +917,37 @@ basic_block_stats_t::print_bytes_accessed()
         }
     }
 
-    std::ofstream perfect_loading_decisions_dat;
-    std::cout << "Write file to " << output_dir << std::endl;
-    perfect_loading_decisions_dat.open((output_dir + "/perfect_loading.dat"),
-                                       std::ios::out | std::ios::binary);
-    for (auto const &[base_addr, idx] : eviction_to_fetch_index_map) {
-        auto presences = bytes_accessed_per_presence_per_cacheline[base_addr];
-        auto last_presence = presences.back();
-        uint64_t total_accesses = get_total_mask_for_presence(last_presence);
-        perfect_fetch_history[idx] = std::pair(base_addr, total_accesses);
-    }
-    if (!perfect_loading_decisions_dat) {
-        std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
-                  << "/perfect_loading.dat\n";
-        std::cout << "==== PERFECT LOADING DECISIONS ====\n";
-        for (const auto &addr_mask_pair : perfect_fetch_history) {
-            std::cout << addr_mask_pair.first << "; " << addr_mask_pair.second << "\n";
+    // We could have enabled the perfect fetch only for relevant parts of the execution
+    if (perfect_fetch_history.size() > 0) {
+        std::ofstream perfect_loading_decisions_dat;
+        std::cout << "Write file to " << output_dir << std::endl;
+        perfect_loading_decisions_dat.open((output_dir + "/perfect_loading.dat"),
+                                           std::ios::out | std::ios::binary);
+        for (auto const &[base_addr, idx] : eviction_to_fetch_index_map) {
+            auto presences = bytes_accessed_per_presence_per_cacheline[base_addr];
+            auto last_presence = presences.back();
+            uint64_t total_accesses = get_total_mask_for_presence(last_presence);
+            perfect_fetch_history[idx] = std::pair(base_addr, total_accesses);
         }
-    } else {
-        for (const auto &addr_mask_pair : perfect_fetch_history) {
-            perfect_loading_decisions_dat << addr_mask_pair.first << ";"
-                                          << addr_mask_pair.second << "\n";
+        if (!perfect_loading_decisions_dat) {
+            std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
+                      << "/perfect_loading.dat\n";
+            std::cout << "==== PERFECT LOADING DECISIONS ====\n";
+            for (const auto &addr_mask_pair : perfect_fetch_history) {
+                std::cout << addr_mask_pair.first << "; " << addr_mask_pair.second
+                          << "\n";
+            }
+        } else {
+            for (const auto &addr_mask_pair : perfect_fetch_history) {
+                perfect_loading_decisions_dat << addr_mask_pair.first << ";"
+                                              << addr_mask_pair.second << "\n";
+            }
+            if (!perfect_loading_decisions_dat.good()) {
+                std::cerr << "writing failed..." << std::endl;
+            }
+            perfect_loading_decisions_dat.flush();
+            perfect_loading_decisions_dat.close();
         }
-        if (!perfect_loading_decisions_dat.good()) {
-            std::cerr << "writing failed..." << std::endl;
-        }
-        perfect_loading_decisions_dat.flush();
-        perfect_loading_decisions_dat.close();
     }
 
     std::ofstream distinct_cachelines_csv;

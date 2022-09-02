@@ -74,6 +74,9 @@ public:
     print_stats(std::string prefix) override;
 
     void
+    set_perfect_size_tracer(bool val = true);
+
+    void
     reset() override;
 
 protected:
@@ -148,6 +151,7 @@ private:
     const std::string output_dir;
     size_t max_instr_size = 0;
     bool prev_hit = false;
+    bool perfect_block_size_trace_enabled = false;
     BasicBlock current_block;
     BasicBlock current_block_cacheline_constrained;
     static const size_t cache_line_address_mask = 0xFFFFFFFFFFFFFFC0;

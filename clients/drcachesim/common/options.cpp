@@ -180,6 +180,13 @@ droption_t<bool> op_overwrite_prev_results(
     "in the same directory. If set to false, the tool will not run and notify you that "
     "there is data already present.");
 
+droption_t<bool> op_write_perfect_size_prediction(
+    DROPTION_SCOPE_ALL, "write_perfect_size_prediction", false,
+    "If set to true, the analyser will keep a record of perfect block size predictions",
+    "The perfect block size prediction can be use as an oracle for later VCL runs, using "
+    "this as an input. The writing of these files is though quite costly in terms of "
+    "memory, therefor it is disabled by default.");
+
 droption_t<bool> op_L0_filter_deprecated(
     DROPTION_SCOPE_CLIENT, "L0_filter", false,
     "Filter out first-level instruction and data cache hits during tracing",

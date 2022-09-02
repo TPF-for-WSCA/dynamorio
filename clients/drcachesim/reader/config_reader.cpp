@@ -108,6 +108,17 @@ config_reader_t::configure(std::istream *config_file, cache_simulator_knobs_t &k
             } else {
                 knobs.overwrite_prev_results = false;
             }
+        } else if (param == "write_perfect_size_prediction") {
+            std::string bool_val;
+            if (!(*fin_ >> bool_val)) {
+                ERRMSG("ERROR while reading overwrite previous_results config.\n");
+                return false;
+            }
+            if (is_true(bool_val)) {
+                knobs.write_perfect_size_prediction = true;
+            } else {
+                knobs.write_perfect_size_prediction = false;
+            }
         } else if (param == "warmup_fraction") {
             // Fraction of cache lines that must be filled to end the warmup.
             if (!(*fin_ >> knobs.warmup_fraction)) {

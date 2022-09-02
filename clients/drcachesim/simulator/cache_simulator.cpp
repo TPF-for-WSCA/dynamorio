@@ -51,6 +51,7 @@
 #include <numeric>
 #include <sys/stat.h>
 #include <filesystem>
+#include <system_error>
 
 #include "snoop_filter.h"
 
@@ -142,18 +143,21 @@ cache_simulator_t::cache_simulator_t(const cache_simulator_knobs_t &knobs)
         }
         snooped_caches_[(2 * i) + 1] = l1_dcaches_[i];
         std::string output_dir = op_data_dir.get_value() + "/" +
-            std::to_string(knobs_.sim_refs) + "/" + std::to_string(knobs_.L1I_size);
+            std::to_string(knobs_.sim_refs) + "/" + std::to_string(knobs_.L1I_size) +
+            "/" + std::to_string(knobs_.L1I_assoc);
         if (!(std::filesystem::is_empty(output_dir) || knobs_.overwrite_prev_results)) {
             error_string_ = "experiment already ran - returning early";
             success_ = false;
             return;
         }
+        auto bb_stats_collector =
+            new basic_block_stats_t((int)knobs_.line_size, "", output_dir,
+                                    warmup_enabled_, knobs_.model_coherence);
+        bb_stats_collector->set_perfect_size_tracer(knobs_.write_perfect_size_prediction);
         if (!l1_icaches_[i]->cache_t::init(
                 knobs_.L1I_assoc, (int)knobs_.line_size, (int)knobs_.L1I_size, llc->self_,
-                new basic_block_stats_t((int)knobs_.line_size, "", output_dir,
-                                        warmup_enabled_, knobs_.model_coherence),
-                nullptr /*prefetcher*/, false /*inclusive*/, knobs_.model_coherence,
-                2 * i, snoop_filter_) ||
+                bb_stats_collector, nullptr /*prefetcher*/, false /*inclusive*/,
+                knobs_.model_coherence, 2 * i, snoop_filter_) ||
             !l1_dcaches_[i]->init(
                 knobs_.L1D_assoc, (int)knobs_.line_size, (int)knobs_.L1D_size, llc->self_,
                 new cache_stats_t((int)knobs_.line_size, "", warmup_enabled_,
@@ -324,18 +328,32 @@ cache_simulator_t::cache_simulator_t(std::istream *config_file)
         bool is_coherent_ = knobs_.model_coherence &&
             (non_coherent_caches_.find(cache_name) == non_coherent_caches_.end());
         std::string output_dir = op_data_dir.get_value() + "/" +
-            std::to_string(knobs_.sim_refs) + "/" + std::to_string(cache_config.size);
+            std::to_string(knobs_.sim_refs) + "/" + std::to_string(cache_config.size) +
+            "/" + std::to_string(cache_config.assoc);
         caching_device_stats_t *stats_collector;
         if (cache_config.type.compare("instruction") == 0) {
-            if (!(std::filesystem::is_empty(output_dir) ||
-                  knobs_.overwrite_prev_results)) {
+            std::error_code ec;
+            bool empty = std::filesystem::is_empty(output_dir, ec);
+            if (ec && ec.value() != ENOENT) {
+                error_string_ = "Couldn't check if directory is present or not - make "
+                                "sure your have the correct access rights";
+                success_ = false;
+                return;
+            }
+            empty = empty || ec.value() == ENOENT; // Not existing is also fine - we
+                                                   // create the innermost folder later
+            if (!(empty || knobs_.overwrite_prev_results)) {
                 error_string_ = "experiment already ran - returning early";
                 success_ = false;
                 return;
             }
-            stats_collector =
+            auto bb_stats_collector =
                 new basic_block_stats_t((int)knobs_.line_size, cache_config.miss_file,
                                         output_dir, warmup_enabled_, is_coherent_);
+            bb_stats_collector->set_perfect_size_tracer(
+                knobs_.write_perfect_size_prediction);
+            stats_collector = bb_stats_collector;
+
         } else {
             stats_collector =
                 new cache_stats_t((int)knobs_.line_size, cache_config.miss_file,
