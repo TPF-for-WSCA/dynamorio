@@ -183,6 +183,7 @@ protected:
     init_blocks() override;
 
 private:
+    std::string perfect_prefetching_path;
     std::pair<int, int>
     start_and_end_oracle(addr_t address);
     bool

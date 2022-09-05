@@ -171,7 +171,9 @@ droption_t<std::string> op_perfect_block_predictor(
     "Used for VCL simulations as an oracle. Tracked from previous runs",
     "The VCL caching device will use this file to predict the size of instruction "
     "cache blocks and the contained useful bytes. The strategy used to extract "
-    "the perfect block predictor has currently to be changed in code.");
+    "the perfect block predictor has currently to be changed in code. This directs to "
+    "the directory containing all perfect predictors per cachesize "
+    "(./<cachesize>/perfect_predictor.dat)");
 
 droption_t<bool> op_overwrite_prev_results(
     DROPTION_SCOPE_ALL, "overwrite_previous_results", false,

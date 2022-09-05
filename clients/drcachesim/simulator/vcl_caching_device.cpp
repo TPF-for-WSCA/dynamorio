@@ -5,12 +5,12 @@
 #include <math.h>
 #include <iterator>
 #include "cache.h"
+#include <filesystem>
 
 vcl_caching_device_t::vcl_caching_device_t(std::string perfect_fetch_file)
     : I_caching_device_t()
 {
-    perfect_loading_decision_fh_.open(perfect_fetch_file,
-                                      std::ios::in | std::ios::binary);
+    perfect_prefetching_path = perfect_fetch_file;
 }
 
 // TODO: Implement more sophisticated splitting behaviour here
@@ -42,7 +42,7 @@ vcl_caching_device_t::read_n_oracle_lines(size_t n)
     std::string line;
     bool endoffile = true;
     while (n > 0) {
-        endoffile = !std::getline(perfect_loading_decision_fh_, line).fail();
+        endoffile = std::getline(perfect_loading_decision_fh_, line).fail();
         if (endoffile) {
             return endoffile;
         }
@@ -153,6 +153,15 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
     else if (!*stats)
         return false;
 
+    int total_size =
+        num_sets * 8 * 64; // default so far - we tested with 8 way 64 byte lines
+
+    std::filesystem::path root_dir(perfect_prefetching_path);
+    std::filesystem::path size_dir(std::to_string(total_size));
+    std::filesystem::path file("perfect_loading.dat");
+    std::filesystem::path fullpath = root_dir / size_dir / file;
+    perfect_loading_decision_fh_.open(fullpath.string(), std::ios::in | std::ios::binary);
+
     associativity_ = associativity;
     block_sizes_ = way_sizes;
     block_size_ = *(std::max_element(way_sizes.begin(), way_sizes.end()));
@@ -204,6 +213,12 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
     addr_t final_addr = memref_in.data.addr + memref_in.data.size - 1;
     addr_t final_tag = compute_tag(final_addr);
     addr_t tag = compute_tag(memref_in.data.addr);
+    if (tag == 5565636 || final_tag == 5565637) {
+        std::cout << "break" << std::endl;
+    }
+    if (tag < final_tag) {
+        std::cout << "tag: " << tag << "; final tag: " << final_tag << std::endl;
+    }
 
     memref = memref_in;
     for (; tag <= final_tag; ++tag) {
@@ -214,6 +229,9 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
         if (tag + 1 <= final_tag) {
             memref.data.size = ((tag + 1) << block_size_bits_) -
                 memref.data.addr; // is this good enough?
+        }
+        if (memref.data.size > MAX_X86_INSTR_SIZE) {
+            std::cout << "WTF" << std::endl;
         }
 
         addr_t baseaddr = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
@@ -231,7 +249,7 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
                         block_way.first; // we only store vcl blocks in vcl cache
                 way = block_way.second;
                 if (cache_block->validity_ && cache_block->offset_ <= start &&
-                    end <= (cache_block->size_ + cache_block->offset_)) {
+                    end < (cache_block->size_ + cache_block->offset_)) {
                     // TODO: hit
                     missed = false;
 
@@ -239,14 +257,18 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
                 } else if (cache_block->validity_ && cache_block->offset_ <= start &&
                            start < (cache_block->size_ + cache_block->offset_)) {
                     // we overlap partially - handle non-stored part [DONE]
-                    // NOTE: This should not happen
-                    std::cout << "We found a mid-instruction block ending / instr.addr: "
-                              << memref.data.addr << " / base_address: " << baseaddr
-                              << std::endl;
+                    // TODO: Handle overlapping in the end instead of the beginning.
+                    // NOTE: It is possible that we have a part of one instruction in one
+                    // cacheline and the other part in the next one - this is perfectly
+                    // fine for x86 and has been that way even for default cache sizes
                     memref.data.addr =
                         baseaddr + cache_block->offset_ + cache_block->size_;
                     memref.data.size = memref.data.size -
                         (cache_block->offset_ + cache_block->size_ - start);
+                    start = memref.data.addr - baseaddr;
+                    if (memref.data.size > MAX_X86_INSTR_SIZE) {
+                        std::cout << "WHAT THE FCK HAPPENED" << std::endl;
+                    }
                     missed = true;
                 } else {
                     // we do not overlap - handle a miss [DONE]
@@ -262,8 +284,8 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
             // TODO: put out into separate func - check which params are needed
             auto predicted_block = start_and_end_oracle(memref.data.addr);
             way = replace_which_way(block_idx,
-                                    /* +1 for size */
-                                    predicted_block.second - predicted_block.first + 1);
+                                    /* +1 for size, data.addr to adjust for overlapping */
+                                    predicted_block.second - start + 1);
             cache_block =
                 (vcl_caching_device_block_t *)&get_caching_device_block(block_idx, way);
             if (parent_ != NULL) {
@@ -319,6 +341,9 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
             addr_t next_addr = (tag + 1) << block_size_bits_;
             memref.data.addr = next_addr;
             memref.data.size = final_addr - next_addr + 1;
+        }
+        if (memref.data.size > MAX_X86_INSTR_SIZE) {
+            std::cout << "WTF" << std::endl;
         }
     }
 }

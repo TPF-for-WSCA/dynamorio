@@ -13,7 +13,7 @@ overwrite_previous_results  true
 P0L1I {                        // P0 L1 instruction cache
   type            instruction
   core            0
-  size            2048 // 131072        // 32K
+  size            32768 // 131072        // 32K
   parent          P0L2
   replace_policy  LRU
   line_sizes      [
@@ -32,7 +32,7 @@ P0L1I {                        // P0 L1 instruction cache
                     64,
                     64,
                   ]  // number of entries here = number of ways/associativity
-  num_sets        4 // 2kb / 512
+  num_sets        64 // 2kb / 512
 }
 P0L1D {                        // P0 L1 data cache
   type            data

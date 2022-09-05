@@ -408,15 +408,17 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
 }
 
 void
-basic_block_stats_t::track_cacheline_access(const memref_t &memref)
+basic_block_stats_t::track_cacheline_access(const memref_t &memref,
+                                            caching_device_block_t *cache_block)
 {
     addr_t cacheline_start_address =
         cache_line_address_mask & current_block.starting_addr;
     addr_t cacheline_end_address =
         cache_line_address_mask & (current_block.starting_addr + current_block.byte_size);
     cacheline_end_address = (cacheline_end_address == cacheline_start_address)
-        ? cacheline_end_address + 64
-        : cacheline_end_address;
+        ? cacheline_end_address + cache_block->size_
+        : cacheline_end_address; // we need t get the size of the cacheblock in case we
+                                 // are working with a vcl
 
     if (cacheline_end_address - cacheline_start_address > max_cacheline_bb) {
         max_cacheline_bb = cacheline_end_address - cacheline_start_address;
@@ -453,7 +455,8 @@ basic_block_stats_t::track_cacheline_access(const memref_t &memref)
 }
 
 void
-basic_block_stats_t::handle_branch(const memref_t &memref)
+basic_block_stats_t::handle_branch(const memref_t &memref,
+                                   caching_device_block_t *cache_block)
 {
     // assuming x86, instructions in basic blocks have monotoneously increasing
     // addresses
@@ -470,7 +473,7 @@ basic_block_stats_t::handle_branch(const memref_t &memref)
     //  basic_blocks_hit_count[current_block] += 1;
     //  basic_block_size_history.push_back(current_block.byte_size);
 
-    // track_cacheline_access(memref);
+    // track_cacheline_access(memref, cache_block);
 
     if (basic_block_size_history.size() == basic_block_size_history.capacity()) {
         basic_block_size_history.reserve(basic_block_size_history.capacity() * 2);
@@ -567,7 +570,7 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
     if (is_branch_) {
         //        if (current_block.byte_size == 1)
         //            print_last_n_memrefs(1);
-        handle_branch(memref);
+        handle_branch(memref, cache_block);
     }
 
     if (is_interrupt_) {

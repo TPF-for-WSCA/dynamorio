@@ -92,13 +92,13 @@ protected:
     std::unordered_map<addr_t, int> eviction_to_fetch_index_map;
     std::vector<std::pair<addr_t, uint64_t>> perfect_fetch_history;
 
-private:
+    // TODO: What to move to private?
     void
     record_block(const BasicBlock &bb);
     bool
     handle_instr(const memref_t &memeref, bool hit);
     void
-    handle_branch(const memref_t &memref);
+    handle_branch(const memref_t &memref, caching_device_block_t *cache_block);
     void
     handle_interrupt(const memref_t &memref, bool hit);
 
@@ -129,7 +129,7 @@ private:
         const std::vector<std::vector<uint64_t>> &cacheline_presences);
 
     void
-    track_cacheline_access(const memref_t &memref);
+    track_cacheline_access(const memref_t &memref, caching_device_block_t *cache_block);
 
     uint64_t
     bytes_accessed_by_block(const addr_t &cacheline_base, BasicBlock &block);

@@ -122,6 +122,7 @@ add_exported_library(drmemtrace_simulator STATIC
   simulator/vcl_caching_device.cpp
   simulator/caching_device_stats.cpp
   simulator/basic_block_stats.cpp
+  simulator/vcl_cache_stats.cpp
   simulator/cache_stats.cpp
   simulator/prefetcher.cpp
   simulator/cache_simulator.cpp
