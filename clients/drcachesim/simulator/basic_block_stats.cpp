@@ -24,6 +24,7 @@
 // DEBUGGING IMPORTS: HOW MUCH MEMORY DO WE USE
 #include "stdlib.h"
 #include "string.h"
+#include "cacheline_access_bitmask_helpers.h"
 
 // DEBUGGING ABORT
 // #define ANALYSED_INSTRUCTIONS_PER_ITERATION 50000000
@@ -75,96 +76,6 @@ trim_vector(std::vector<size_t> &vec)
     for (i = vec.size(); i >= 0 && vec[i] == 0; --i)
         ;
     vec.resize(i + 1);
-}
-
-uint64_t
-set_accessed(uint64_t mask, uint8_t lower, uint8_t upper)
-{
-    if (upper > 64) {
-        upper = 64;
-    }
-
-    uint64_t bitmask = 1;
-    for (uint8_t i = 0; i < lower; i++) {
-        bitmask = bitmask << 1;
-    }
-
-    for (uint8_t i = lower; i < upper; i++) {
-        mask |= bitmask;
-        bitmask = bitmask << 1;
-    }
-    return mask;
-}
-
-uint64_t
-get_total_mask_for_presence(const std::vector<uint64_t> &masks)
-{
-    uint64_t current_mask = 0;
-    for (auto const &mask : masks) {
-        current_mask |= mask;
-    }
-    return current_mask;
-}
-
-uint8_t
-get_total_access_from_masks(const std::vector<uint64_t> &masks)
-{
-    return (uint8_t)__builtin_popcountll(get_total_mask_for_presence(masks));
-}
-
-/**
- * @brief Parses a bit mask to detect holes and blocks in a cacheline
- *
- * @param the mask of the cacheline under test
- * @return std::vector<int> A vector containing B H B H B sizes (Block and hole sizes),
- * where it alwazs needs to return an odd number of entries, as it alwazs has to start
- * and end with a block and in between tw blcks there is always exclusively one single
- * hole.
- */
-std::vector<int>
-count_holes_in_masks(const uint64_t &mask)
-{
-    std::vector<int> holes;
-    uint8_t prev_bit = 0;
-    uint8_t count_hole_size = 0;
-    uint8_t count_block_size = 0;
-    bool trailing = true;
-    for (int byte = 0; byte < 64; byte++) {
-        uint8_t current_bit = ((mask >> byte) & 0x1);
-        if (current_bit == 1 && trailing) {
-            trailing = false;
-            prev_bit = current_bit;
-            count_block_size = 1;
-            continue;
-        } else if (current_bit == 0 && trailing) {
-            continue;
-        }
-
-        // posedge/negedge kind of analysis
-        if (current_bit == 0 && prev_bit == 1) {
-            holes.push_back(count_block_size);
-            count_block_size = 0;
-        } else if (current_bit == 1 && prev_bit == 0) {
-            holes.push_back(count_hole_size);
-            count_hole_size = 0;
-        }
-
-        if (current_bit == 0) {
-            count_hole_size += 1;
-        } else {
-            count_block_size += 1;
-        }
-        prev_bit = current_bit;
-    }
-
-    if (prev_bit == 1 && count_block_size > 0) {
-        holes.push_back(count_block_size);
-    }
-
-    if (holes.size() % 2 != 1) {
-        std::cout << "WHAT IS WRONG WITH YOU???" << std::endl;
-    }
-    return holes;
 }
 
 /**

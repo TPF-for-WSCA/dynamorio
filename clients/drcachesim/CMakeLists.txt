@@ -120,6 +120,7 @@ add_exported_library(drmemtrace_simulator STATIC
   simulator/cache_miss_analyzer.cpp
   simulator/caching_device.cpp
   simulator/vcl_caching_device.cpp
+  simulator/cacheline_access_bitmask_helpers.cpp
   simulator/caching_device_stats.cpp
   simulator/basic_block_stats.cpp
   simulator/vcl_cache_stats.cpp

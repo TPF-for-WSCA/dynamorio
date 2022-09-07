@@ -1,4 +1,5 @@
 #include "vcl_caching_device.h"
+#include "cacheline_access_bitmask_helpers.h"
 #include "../common/utils.h"
 #include "snoop_filter.h"
 #include <bits/basic_string.h>
@@ -207,15 +208,50 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
 }
 
 void
+vcl_caching_device_t::insert_cacheblock(vcl_caching_device_block_t *cache_block)
+{
+    addr_t victim_tag = cache_block->tag_;
+    if (victim_tag == TAG_INVALID) {
+        loaded_blocks_++;
+        return;
+    }
+    if (!children_.empty() && inclusive_) {
+        for (auto &child : children_) {
+            child->invalidate(victim_tag, INVALIDATION_INCLUSIVE);
+        }
+    }
+    if (!coherent_cache_) {
+        return;
+    }
+    bool child_holds_tag = false;
+    if (!children_.empty()) {
+        for (auto &child : children_) {
+            if (child->contains_tag(victim_tag)) {
+                child_holds_tag = true;
+                break;
+            }
+        }
+    }
+    if (child_holds_tag) {
+        return;
+    }
+    if (snoop_filter_ != NULL) {
+        snoop_filter_->snoop_eviction(victim_tag, id_);
+    } else if (parent_ != NULL) {
+        parent_->propagate_eviction(victim_tag, this);
+    }
+}
+
+void
 vcl_caching_device_t::request(_memref_t const &memref_in)
 {
     memref_t memref;
     addr_t final_addr = memref_in.data.addr + memref_in.data.size - 1;
     addr_t final_tag = compute_tag(final_addr);
     addr_t tag = compute_tag(memref_in.data.addr);
-    if (tag == 5565636 || final_tag == 5565637) {
-        std::cout << "break" << std::endl;
-    }
+    addr_t baseaddr = memref_in.data.addr & _CACHELINE_BASEADDRESS_MASK;
+
+    // Note: the tag still contains the index bits here
     if (tag < final_tag) {
         std::cout << "tag: " << tag << "; final tag: " << final_tag << std::endl;
     }
@@ -234,60 +270,95 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
             std::cout << "WTF" << std::endl;
         }
 
-        addr_t baseaddr = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
+        baseaddr = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
         uint8_t start = memref.data.addr - baseaddr;
         uint8_t end = start + memref.data.size - 1; // last bytes offset
-        auto block_ways = find_all_caching_device_blocks(memref.data.addr);
-        vcl_caching_device_block_t *cache_block = nullptr;
+        auto block_ways = find_all_caching_device_blocks(memref.data.addr, false, true);
         if (block_ways.size() > 0) {
-            // found - check if in range
+            // found - we are in range
+            if (block_ways.size() > 1) {
+                std::cout << "we now should definitely only have one inlier if we evict"
+                          << std::endl;
+            }
+            vcl_caching_device_block_t *cache_block = nullptr;
             for (auto &block_way : block_ways) {
                 // We can ever hit in one - we ensure this by not inserting overlapping
                 // regions
+                // Update start and end if we hit in overlapping regions
+                start = memref.data.addr - baseaddr;
+                end = start + memref.data.size - 1; // last bytes offset
                 cache_block =
                     (vcl_caching_device_block_t *)
                         block_way.first; // we only store vcl blocks in vcl cache
                 way = block_way.second;
+                auto next_block = cache_block->size_ + cache_block->offset_;
                 if (cache_block->validity_ && cache_block->offset_ <= start &&
-                    end < (cache_block->size_ + cache_block->offset_)) {
+                    end < next_block) {
                     // TODO: hit
+                    record_access_stats(memref, true, cache_block);
+                    ((cache_t *)cache_)->access_update(block_idx, way);
                     missed = false;
-
                     break;
-                } else if (cache_block->validity_ && cache_block->offset_ <= start &&
-                           start < (cache_block->size_ + cache_block->offset_)) {
-                    // we overlap partially - handle non-stored part [DONE]
-                    // TODO: Handle overlapping in the end instead of the beginning.
-                    // NOTE: It is possible that we have a part of one instruction in one
-                    // cacheline and the other part in the next one - this is perfectly
-                    // fine for x86 and has been that way even for default cache sizes
-                    memref.data.addr =
-                        baseaddr + cache_block->offset_ + cache_block->size_;
-                    memref.data.size = memref.data.size -
-                        (cache_block->offset_ + cache_block->size_ - start);
-                    start = memref.data.addr - baseaddr;
-                    if (memref.data.size > MAX_X86_INSTR_SIZE) {
-                        std::cout << "WHAT THE FCK HAPPENED" << std::endl;
-                    }
-                    missed = true;
                 } else {
-                    // we do not overlap - handle a miss [DONE]
+                    // we are not contained - handle a miss [DONE]
                     missed = true;
                 }
+                // Old impossible implementation kept for reference (for now)
+                // else if (cache_block->validity_ && cache_block->offset_ <= start &&
+                //            start < next_block) {
+                //     // we overlap partially - handle non-stored part [DONE]
+                //     // NOTE: It is possible that we have a part of one instruction in
+                //     one
+                //     // cacheline and the other part in the next one - this is perfectly
+                //     // fine for x86 and has been that way even for default cache sizes
+                //     memref.data.addr =
+                //         baseaddr + cache_block->offset_ + cache_block->size_;
+                //     memref.data.size = memref.data.size -
+                //         (cache_block->offset_ + cache_block->size_ - start);
+                //     start = memref.data.addr - baseaddr;
+                //     if (memref.data.size > MAX_X86_INSTR_SIZE) {
+                //         std::cout << "WHAT THE FCK HAPPENED" << std::endl;
+                //     }
+                //     missed = true;
+                //     partial_match = true;
+                // } else if (cache_block->validity_ && cache_block->offset_ <= end &&
+                //            end < next_block) {
+                //
+                //    // Handle overlapping in the end instead of the beginning. [DONE]
+                //    memref.data.size -= (end - cache_block->offset_ + 1);
+                //    partial_match = true;
+                //
+                //} else if (cache_block->validity_ && start <= cache_block->offset_ &&
+                //           (next_block - 1) <= end) {
+                //    // Handle case where cache block contains proper subset of memref
+                //    TODO std::cout
+                //        << "CACHEBLOCK RIPPING HOLE INTO MEMREF -- DOES THIS EVEN
+                //        HAPPEN"
+                //        << std::endl;
+                //}
             }
         } else {
-            // miss
-            missed = true;
+            // check buffer
+            auto result = std::find_if(fifo_buffer.begin(), fifo_buffer.end(),
+                                       [memref](const std::pair<uint8_t, uint8_t> &val) {
+                                           return val.first == memref.data.addr;
+                                       });
+            if (result == fifo_buffer.end()) {
+                missed = true;
+            } else {
+                // nullptr indicating hit in buffer
+                record_access_stats(memref, true, nullptr);
+            }
         }
 
         if (missed) {
             // TODO: put out into separate func - check which params are needed
-            auto predicted_block = start_and_end_oracle(memref.data.addr);
-            way = replace_which_way(block_idx,
-                                    /* +1 for size, data.addr to adjust for overlapping */
-                                    predicted_block.second - start + 1);
-            cache_block =
-                (vcl_caching_device_block_t *)&get_caching_device_block(block_idx, way);
+            std::pair<addr_t, uint64_t> *to_insert = nullptr;
+            if (!fifo_buffer.empty()) {
+                to_insert = &fifo_buffer.front();
+            }
+
+            // Fetch before inserting into buffer
             if (parent_ != NULL) {
                 parent_->request(memref);
             }
@@ -295,43 +366,28 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
                 snoop_filter_->snoop(tag, id_, (memref.data.type == TRACE_TYPE_WRITE));
             }
 
-            addr_t victim_tag = cache_block->tag_;
-            if (victim_tag == TAG_INVALID) {
-                loaded_blocks_++;
-            } else {
-                if (!children_.empty() && inclusive_) {
-                    for (auto &child : children_) {
-                        child->invalidate(victim_tag, INVALIDATION_INCLUSIVE);
-                    }
-                }
-                if (coherent_cache_) {
-                    bool child_holds_tag = false;
-                    if (!children_.empty()) {
-                        for (auto &child : children_) {
-                            if (child->contains_tag(victim_tag)) {
-                                child_holds_tag = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!child_holds_tag) {
-                        if (snoop_filter_ != NULL) {
-                            snoop_filter_->snoop_eviction(victim_tag, id_);
-                        } else if (parent_ != NULL) {
-                            parent_->propagate_eviction(victim_tag, this);
-                        }
-                    }
-                }
+            // TODO: Keep data if we eagerly evict
+            fifo_buffer.push(std::pair<addr_t, uint64_t>(baseaddr, 0));
+
+            if ((*to_insert) != fifo_buffer.front()) {
+                vcl_caching_device_block_t *cache_block = nullptr;
+                auto blocks = get_start_end_of_bitmask(to_insert->second);
+                // TODO: handle holes ...
+                /* +1 for size, data.addr to adjust for overlapping */
+                int size = blocks.back().second - blocks.front().first + 1;
+                way = replace_which_way(block_idx, size);
+                cache_block = (vcl_caching_device_block_t *)&get_caching_device_block(
+                    block_idx, way);
+                // we have something to insert...
+                insert_cacheblock(cache_block);
+                update_tag(cache_block, way, tag);
+                uint8_t max_offset = 64 - cache_block->size_;
+                // we will not start later in the cacheline than that
+                cache_block->offset_ = std::min(start, max_offset);
+                record_access_stats(memref, false, cache_block);
+                ((cache_t *)cache_)->access_update(block_idx, way);
             }
-            update_tag(cache_block, way, tag);
-            uint8_t max_offset = 64 - cache_block->size_;
-            // we will not start later in the cacheline than that
-            cache_block->offset_ = std::min(start, max_offset);
         }
-
-        record_access_stats(memref, !missed, cache_block);
-
-        ((cache_t *)cache_)->access_update(block_idx, way);
 
         if (missed && !type_is_prefetch(memref.data.type) && prefetcher_ != nullptr) {
             prefetcher_->prefetch(this, memref);
