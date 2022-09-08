@@ -32,7 +32,7 @@ public:
         if (this->size() == length) {
             this->pop_front();
         }
-        this->push(value);
+        std::deque<T>::push_back(value);
     }
 };
 

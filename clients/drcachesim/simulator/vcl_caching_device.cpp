@@ -252,9 +252,9 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
     addr_t baseaddr = memref_in.data.addr & _CACHELINE_BASEADDRESS_MASK;
 
     // Note: the tag still contains the index bits here
-    if (tag < final_tag) {
-        std::cout << "tag: " << tag << "; final tag: " << final_tag << std::endl;
-    }
+    // if (tag < final_tag) {
+    //     std::cout << "tag: " << tag << "; final tag: " << final_tag << std::endl;
+    // }
 
     memref = memref_in;
     for (; tag <= final_tag; ++tag) {
@@ -276,10 +276,11 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
         auto block_ways = find_all_caching_device_blocks(memref.data.addr, false, true);
         if (block_ways.size() > 0) {
             // found - we are in range
-            if (block_ways.size() > 1) {
-                std::cout << "we now should definitely only have one inlier if we evict"
-                          << std::endl;
-            }
+            // if (block_ways.size() > 1) {
+            //     std::cout << "we now should definitely only have one inlier if we
+            //     evict"
+            //               << std::endl;
+            // }
             vcl_caching_device_block_t *cache_block = nullptr;
             for (auto &block_way : block_ways) {
                 // We can ever hit in one - we ensure this by not inserting overlapping
@@ -339,15 +340,17 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
             }
         } else {
             // check buffer
-            auto result = std::find_if(fifo_buffer.begin(), fifo_buffer.end(),
-                                       [memref](const std::pair<uint8_t, uint8_t> &val) {
-                                           return val.first == memref.data.addr;
-                                       });
+            auto result = std::find_if(
+                fifo_buffer.begin(), fifo_buffer.end(),
+                [memref](const std::pair<addr_t, uint64_t> &val) {
+                    return val.first == (memref.data.addr & _CACHELINE_BASEADDRESS_MASK);
+                });
             if (result == fifo_buffer.end()) {
                 missed = true;
             } else {
                 // nullptr indicating hit in buffer
                 record_access_stats(memref, true, nullptr);
+                result->second = set_accessed(result->second, start, (end + 1));
             }
         }
 
@@ -367,9 +370,10 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
             }
 
             // TODO: Keep data if we eagerly evict
-            fifo_buffer.push(std::pair<addr_t, uint64_t>(baseaddr, 0));
+            auto bitmask = set_accessed(0, start, (end + 1));
+            fifo_buffer.push(std::pair<addr_t, uint64_t>(baseaddr, bitmask));
 
-            if ((*to_insert) != fifo_buffer.front()) {
+            if (to_insert != nullptr && (*to_insert) != fifo_buffer.front()) {
                 vcl_caching_device_block_t *cache_block = nullptr;
                 auto blocks = get_start_end_of_bitmask(to_insert->second);
                 // TODO: handle holes ...
