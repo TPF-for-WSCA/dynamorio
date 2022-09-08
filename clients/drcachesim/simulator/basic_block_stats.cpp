@@ -24,6 +24,7 @@
 // DEBUGGING IMPORTS: HOW MUCH MEMORY DO WE USE
 #include "stdlib.h"
 #include "string.h"
+#include "cacheline_access_bitmask_helpers.h"
 
 // DEBUGGING ABORT
 // #define ANALYSED_INSTRUCTIONS_PER_ITERATION 50000000
@@ -75,96 +76,6 @@ trim_vector(std::vector<size_t> &vec)
     for (i = vec.size(); i >= 0 && vec[i] == 0; --i)
         ;
     vec.resize(i + 1);
-}
-
-uint64_t
-set_accessed(uint64_t mask, uint8_t lower, uint8_t upper)
-{
-    if (upper > 64) {
-        upper = 64;
-    }
-
-    uint64_t bitmask = 1;
-    for (uint8_t i = 0; i < lower; i++) {
-        bitmask = bitmask << 1;
-    }
-
-    for (uint8_t i = lower; i < upper; i++) {
-        mask |= bitmask;
-        bitmask = bitmask << 1;
-    }
-    return mask;
-}
-
-uint64_t
-get_total_mask_for_presence(const std::vector<uint64_t> &masks)
-{
-    uint64_t current_mask = 0;
-    for (auto const &mask : masks) {
-        current_mask |= mask;
-    }
-    return current_mask;
-}
-
-uint8_t
-get_total_access_from_masks(const std::vector<uint64_t> &masks)
-{
-    return (uint8_t)__builtin_popcountll(get_total_mask_for_presence(masks));
-}
-
-/**
- * @brief Parses a bit mask to detect holes and blocks in a cacheline
- *
- * @param the mask of the cacheline under test
- * @return std::vector<int> A vector containing B H B H B sizes (Block and hole sizes),
- * where it alwazs needs to return an odd number of entries, as it alwazs has to start
- * and end with a block and in between tw blcks there is always exclusively one single
- * hole.
- */
-std::vector<int>
-count_holes_in_masks(const uint64_t &mask)
-{
-    std::vector<int> holes;
-    uint8_t prev_bit = 0;
-    uint8_t count_hole_size = 0;
-    uint8_t count_block_size = 0;
-    bool trailing = true;
-    for (int byte = 0; byte < 64; byte++) {
-        uint8_t current_bit = ((mask >> byte) & 0x1);
-        if (current_bit == 1 && trailing) {
-            trailing = false;
-            prev_bit = current_bit;
-            count_block_size = 1;
-            continue;
-        } else if (current_bit == 0 && trailing) {
-            continue;
-        }
-
-        // posedge/negedge kind of analysis
-        if (current_bit == 0 && prev_bit == 1) {
-            holes.push_back(count_block_size);
-            count_block_size = 0;
-        } else if (current_bit == 1 && prev_bit == 0) {
-            holes.push_back(count_hole_size);
-            count_hole_size = 0;
-        }
-
-        if (current_bit == 0) {
-            count_hole_size += 1;
-        } else {
-            count_block_size += 1;
-        }
-        prev_bit = current_bit;
-    }
-
-    if (prev_bit == 1 && count_block_size > 0) {
-        holes.push_back(count_block_size);
-    }
-
-    if (holes.size() % 2 != 1) {
-        std::cout << "WHAT IS WRONG WITH YOU???" << std::endl;
-    }
-    return holes;
 }
 
 /**
@@ -326,7 +237,10 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
 
     bool aliasing_eviction = (is_adjacent_instr && !hit && prev_hit);
 
-    is_fresh = prev_cacheline_base_address != curr_cacheline_base_address && !hit;
+    // if it is not fresh now, but it is the same address and not a hit we had an eviction
+    // AND this is freshly brought in
+    is_fresh =
+        (prev_cacheline_base_address != curr_cacheline_base_address || !is_fresh) && !hit;
 
     // We do not orient ourselves at branches but only at cacheline base_addresses
     // and corresponding jumps
@@ -405,15 +319,17 @@ basic_block_stats_t::handle_instr(const memref_t &memref, bool hit)
 }
 
 void
-basic_block_stats_t::track_cacheline_access(const memref_t &memref)
+basic_block_stats_t::track_cacheline_access(const memref_t &memref,
+                                            caching_device_block_t *cache_block)
 {
     addr_t cacheline_start_address =
         cache_line_address_mask & current_block.starting_addr;
     addr_t cacheline_end_address =
         cache_line_address_mask & (current_block.starting_addr + current_block.byte_size);
     cacheline_end_address = (cacheline_end_address == cacheline_start_address)
-        ? cacheline_end_address + 64
-        : cacheline_end_address;
+        ? cacheline_end_address + cache_block->size_
+        : cacheline_end_address; // we need t get the size of the cacheblock in case we
+                                 // are working with a vcl
 
     if (cacheline_end_address - cacheline_start_address > max_cacheline_bb) {
         max_cacheline_bb = cacheline_end_address - cacheline_start_address;
@@ -450,7 +366,8 @@ basic_block_stats_t::track_cacheline_access(const memref_t &memref)
 }
 
 void
-basic_block_stats_t::handle_branch(const memref_t &memref)
+basic_block_stats_t::handle_branch(const memref_t &memref,
+                                   caching_device_block_t *cache_block)
 {
     // assuming x86, instructions in basic blocks have monotoneously increasing
     // addresses
@@ -467,7 +384,7 @@ basic_block_stats_t::handle_branch(const memref_t &memref)
     //  basic_blocks_hit_count[current_block] += 1;
     //  basic_block_size_history.push_back(current_block.byte_size);
 
-    // track_cacheline_access(memref);
+    // track_cacheline_access(memref, cache_block);
 
     if (basic_block_size_history.size() == basic_block_size_history.capacity()) {
         basic_block_size_history.reserve(basic_block_size_history.capacity() * 2);
@@ -495,6 +412,12 @@ basic_block_stats_t::handle_interrupt(const memref_t &memref, bool hit)
     current_block_cacheline_constrained.byte_size = memref.data.size;
     current_block_cacheline_constrained.instr_size = 1;
     current_block_cacheline_constrained.miss = !hit;
+}
+
+void
+basic_block_stats_t::set_perfect_size_tracer(bool val)
+{
+    this->perfect_block_size_trace_enabled = val;
 }
 
 void
@@ -558,7 +481,7 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
     if (is_branch_) {
         //        if (current_block.byte_size == 1)
         //            print_last_n_memrefs(1);
-        handle_branch(memref);
+        handle_branch(memref, cache_block);
     }
 
     if (is_interrupt_) {
@@ -567,7 +490,7 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
         handle_interrupt(memref, hit);
     }
 
-    if (!hit) {
+    if (!hit && perfect_block_size_trace_enabled) {
         auto base_addr = memref.instr.addr & cache_line_address_mask;
         auto it = eviction_to_fetch_index_map.find(base_addr);
         int prev_idx = -1;
@@ -580,11 +503,11 @@ basic_block_stats_t::access(const memref_t &memref, bool hit,
             auto last_presence = presences.back();
             auto total_accesses = get_total_mask_for_presence(last_presence);
             perfect_fetch_history[prev_idx] = std::pair(base_addr, total_accesses);
+        } else {
+            // compulsory miss
+            perfect_fetch_history.push_back(std::pair(base_addr, 0));
+            eviction_to_fetch_index_map[base_addr] = perfect_fetch_history.size() - 1;
         }
-        // ELSE: This is a compulsory miss
-
-        perfect_fetch_history.push_back(std::pair(base_addr, 0));
-        eviction_to_fetch_index_map[base_addr] = perfect_fetch_history.size() - 1;
     }
     // if (handled_instructions % ANALYSED_INSTRUCTIONS_PER_ITERATION == 0) {
     //     std::ostringstream oss;
@@ -908,33 +831,37 @@ basic_block_stats_t::print_bytes_accessed()
         }
     }
 
-    std::ofstream perfect_loading_decisions_dat;
-    std::cout << "Write file to " << output_dir << std::endl;
-    perfect_loading_decisions_dat.open((output_dir + "/perfect_loading.dat"),
-                                       std::ios::out | std::ios::binary);
-    for (auto const &[base_addr, idx] : eviction_to_fetch_index_map) {
-        auto presences = bytes_accessed_per_presence_per_cacheline[base_addr];
-        auto last_presence = presences.back();
-        uint64_t total_accesses = get_total_mask_for_presence(last_presence);
-        perfect_fetch_history[idx] = std::pair(base_addr, total_accesses);
-    }
-    if (!perfect_loading_decisions_dat) {
-        std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
-                  << "/perfect_loading.dat\n";
-        std::cout << "==== PERFECT LOADING DECISIONS ====\n";
-        for (const auto &addr_mask_pair : perfect_fetch_history) {
-            std::cout << addr_mask_pair.first << "; " << addr_mask_pair.second << "\n";
+    // We could have enabled the perfect fetch only for relevant parts of the execution
+    if (perfect_fetch_history.size() > 0) {
+        std::ofstream perfect_loading_decisions_dat;
+        std::cout << "Write file to " << output_dir << std::endl;
+        perfect_loading_decisions_dat.open((output_dir + "/perfect_loading.dat"),
+                                           std::ios::out | std::ios::binary);
+        for (auto const &[base_addr, idx] : eviction_to_fetch_index_map) {
+            auto presences = bytes_accessed_per_presence_per_cacheline[base_addr];
+            auto last_presence = presences.back();
+            uint64_t total_accesses = get_total_mask_for_presence(last_presence);
+            perfect_fetch_history[idx] = std::pair(base_addr, total_accesses);
         }
-    } else {
-        for (const auto &addr_mask_pair : perfect_fetch_history) {
-            perfect_loading_decisions_dat << addr_mask_pair.first << ";"
-                                          << addr_mask_pair.second << "\n";
+        if (!perfect_loading_decisions_dat) {
+            std::cerr << "COULD NOT CREATE/WRITE FILE " << output_dir
+                      << "/perfect_loading.dat\n";
+            std::cout << "==== PERFECT LOADING DECISIONS ====\n";
+            for (const auto &addr_mask_pair : perfect_fetch_history) {
+                std::cout << addr_mask_pair.first << "; " << addr_mask_pair.second
+                          << "\n";
+            }
+        } else {
+            for (const auto &addr_mask_pair : perfect_fetch_history) {
+                perfect_loading_decisions_dat << addr_mask_pair.first << ";"
+                                              << addr_mask_pair.second << "\n";
+            }
+            if (!perfect_loading_decisions_dat.good()) {
+                std::cerr << "writing failed..." << std::endl;
+            }
+            perfect_loading_decisions_dat.flush();
+            perfect_loading_decisions_dat.close();
         }
-        if (!perfect_loading_decisions_dat.good()) {
-            std::cerr << "writing failed..." << std::endl;
-        }
-        perfect_loading_decisions_dat.flush();
-        perfect_loading_decisions_dat.close();
     }
 
     std::ofstream distinct_cachelines_csv;

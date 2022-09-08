@@ -61,6 +61,8 @@ struct cache_simulator_knobs_t {
         , LL_miss_file("")
         , data_dir("")
         , perfect_block_predictor("")
+        , overwrite_prev_results(false)
+        , write_perfect_size_prediction(false)
         , model_coherence(false)
         , replace_policy("LRU")
         , data_prefetcher("nextline")
@@ -83,6 +85,8 @@ struct cache_simulator_knobs_t {
     std::string LL_miss_file;
     std::string data_dir;
     std::string perfect_block_predictor;
+    bool overwrite_prev_results;
+    bool write_perfect_size_prediction;
     bool model_coherence;
     std::string replace_policy;
     std::string data_prefetcher;

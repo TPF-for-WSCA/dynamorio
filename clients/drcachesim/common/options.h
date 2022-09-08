@@ -81,6 +81,8 @@ extern droption_t<unsigned int> op_LL_assoc;
 extern droption_t<std::string> op_LL_miss_file;
 extern droption_t<std::string> op_data_dir;
 extern droption_t<std::string> op_perfect_block_predictor;
+extern droption_t<bool> op_overwrite_prev_results;
+extern droption_t<bool> op_write_perfect_size_prediction;
 extern droption_t<bytesize_t> op_L0I_size;
 extern droption_t<bool> op_L0_filter_deprecated;
 extern droption_t<bool> op_L0I_filter;

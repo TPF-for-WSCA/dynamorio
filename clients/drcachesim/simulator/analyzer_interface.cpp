@@ -119,6 +119,8 @@ get_cache_simulator_knobs()
     knobs->LL_miss_file = op_LL_miss_file.get_value();
     knobs->data_dir = op_data_dir.get_value();
     knobs->perfect_block_predictor = op_perfect_block_predictor.get_value();
+    knobs->overwrite_prev_results = op_overwrite_prev_results.get_value();
+    knobs->write_perfect_size_prediction = op_write_perfect_size_prediction.get_value();
     knobs->model_coherence = op_coherence.get_value();
     knobs->replace_policy = op_replace_policy.get_value();
     knobs->data_prefetcher = op_data_prefetcher.get_value();

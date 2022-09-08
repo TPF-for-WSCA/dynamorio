@@ -56,7 +56,7 @@ cache_fifo_t::init(int associativity, int block_size, int total_size,
 
     // Create a replacement pointer for each set, and
     // initialize it to point to the first block.
-    for (int i = 0; i < self_->sets_in_cache_; i++) {
+    for (int i = 0; i < self_->num_sets_; i++) {
         self_->get_caching_device_block(i << self_->assoc_bits_, 0).counter_ = 1;
     }
     return true;

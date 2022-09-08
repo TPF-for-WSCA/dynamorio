@@ -6,8 +6,11 @@
 
 #include "i_caching_device.h"
 #include <set>
+#include <queue>
+#include <deque>
 #include <fstream>
 #include "vcl_caching_device_block.h"
+
 struct AddrBlockCmp {
     bool
     operator()(const std::pair<addr_t, addr_t> &lhs,
@@ -19,6 +22,20 @@ struct AddrBlockCmp {
         return r;
     }
 };
+
+// Quick and dirty: fixed queue with search
+template <typename T, int length> class FIFOQueue : public std::deque<T> {
+public:
+    void
+    push(const T &value)
+    {
+        if (this->size() == length) {
+            this->pop_front();
+        }
+        std::deque<T>::push_back(value);
+    }
+};
+
 class vcl_caching_device_t : public I_caching_device_t {
 
 public:
@@ -142,9 +159,9 @@ protected:
         }
 
         block->tag_ = TAG_INVALID;
+        block->validity_ = false;
         block->counter_ = 0;
     }
-
     inline int
     get_smallest_possible_way(int size)
     {
@@ -176,12 +193,18 @@ protected:
     virtual std::pair<caching_device_block_t *, int>
     find_caching_device_block(addr_t tag) override;
     std::vector<std::pair<caching_device_block_t *, int>>
-    find_all_caching_device_blocks(addr_t addr, bool only_one = false);
+    find_all_caching_device_blocks(addr_t addr, bool only_one = false,
+                                   bool check_inlier = true);
     // a pure virtual function for subclasses to initialize their own block array
     virtual void
     init_blocks() override;
 
 private:
+    void
+    insert_cacheblock(vcl_caching_device_block_t *cache_block);
+    std::string perfect_prefetching_path;
+    // TODO: make fifo buffer size configurable
+    FIFOQueue<std::pair<addr_t, uint64_t>, 64> fifo_buffer;
     std::pair<int, int>
     start_and_end_oracle(addr_t address);
     bool

@@ -171,7 +171,23 @@ droption_t<std::string> op_perfect_block_predictor(
     "Used for VCL simulations as an oracle. Tracked from previous runs",
     "The VCL caching device will use this file to predict the size of instruction "
     "cache blocks and the contained useful bytes. The strategy used to extract "
-    "the perfect block predictor has currently to be changed in code.");
+    "the perfect block predictor has currently to be changed in code. This directs to "
+    "the directory containing all perfect predictors per cachesize "
+    "(./<cachesize>/perfect_predictor.dat)");
+
+droption_t<bool> op_overwrite_prev_results(
+    DROPTION_SCOPE_ALL, "overwrite_previous_results", false,
+    "Ignore previous results that might be in the data directory",
+    "If set to true, the tool will overwrite previous result files that might reside "
+    "in the same directory. If set to false, the tool will not run and notify you that "
+    "there is data already present.");
+
+droption_t<bool> op_write_perfect_size_prediction(
+    DROPTION_SCOPE_ALL, "write_perfect_size_prediction", false,
+    "If set to true, the analyser will keep a record of perfect block size predictions",
+    "The perfect block size prediction can be use as an oracle for later VCL runs, using "
+    "this as an input. The writing of these files is though quite costly in terms of "
+    "memory, therefor it is disabled by default.");
 
 droption_t<bool> op_L0_filter_deprecated(
     DROPTION_SCOPE_CLIENT, "L0_filter", false,
