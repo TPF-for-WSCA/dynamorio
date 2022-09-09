@@ -1,0 +1,164 @@
+// Configuration for a single-core CPU.
+ 
+// Common params.
+num_cores       1
+line_size       64
+cpu_scheduling  true
+sim_refs        1000000000000
+warmup_fraction 0.001
+data_dir        /home/robrunne/Workspace/TracesDatasets/Google/charlie/trace-1/
+
+// Cache params.
+P0L1I {                        // P0 L1 instruction cache
+  type            instruction
+  core            0
+  size            4096 // 131072        // 32K
+  assoc           8
+  parent          P0L2
+  replace_policy  LRU
+  line_sizes      [
+    6,
+    10,
+    16,
+    23,
+    32,
+    51,
+    64,
+    64,
+  ]  // number of entries here = number of ways/associativity
+  num_sets        8
+}
+P0L1D {                        // P0 L1 data cache
+  type            data
+  core            0
+  size            32768        // 32K
+  assoc           8
+  parent          P0L2
+  replace_policy  LRU
+}
+// P1L1I {                        // P0 L1 instruction cache
+//   type            instruction
+//   core            1
+//   size            32768 // 131072        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P1L1D {                        // P0 L1 data cache
+//   type            data
+//   core            1
+//   size            32768        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P2L1I {                        // P0 L1 instruction cache
+//   type            instruction
+//   core            2
+//   size            32768 // 131072        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P2L1D {                        // P0 L1 data cache
+//   type            data
+//   core            2
+//   size            32768        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P3L1I {                        // P0 L1 instruction cache
+//   type            instruction
+//   core            3
+//   size            32768 // 131072        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P3L1D {                        // P0 L1 data cache
+//   type            data
+//   core            3
+//   size            32768        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P4L1I {                        // P0 L1 instruction cache
+//   type            instruction
+//   core            4
+//   size            32768 // 131072        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P4L1D {                        // P0 L1 data cache
+//   type            data
+//   core            4
+//   size            32768        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P5L1I {                        // P0 L1 instruction cache
+//   type            instruction
+//   core            5
+//   size            32768 // 131072        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P5L1D {                        // P0 L1 data cache
+//   type            data
+//   core            5
+//   size            32768        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P6L1I {                        // P0 L1 instruction cache
+//   type            instruction
+//   core            6
+//   size            32768 // 131072        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P6L1D {                        // P0 L1 data cache
+//   type            data
+//   core            6
+//   size            32768        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+// P7L1I {                        // P0 L1 instruction cache
+//   type            instruction
+//   core            7
+//   size            32768 // 131072        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU 
+// }
+// P7L1D {                        // P0 L1 data cache
+//   type            data
+//   core            7
+//   size            32768        // 32K
+//   assoc           8
+//   parent          P0L2
+//   replace_policy  LRU
+// }
+P0L2 {                         // P0 L2 unified cache
+  size            1M  // fix later: currently just large enough to not disturb l1
+  assoc           16
+  inclusive       true
+  parent          LLC
+  replace_policy  LRU
+}
+LLC {                          // LLC
+  size            2M        // would want 1.375MB, as in XEON like skylake processors but cachesim only accepts powers of 2
+  assoc           16
+  inclusive       false
+  parent          memory
+  replace_policy  LRU
+}
