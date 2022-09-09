@@ -254,7 +254,6 @@ vcl_caching_device_t::check_vcl_buffer(const memref_t &memref)
         return true;
     } else {
         // nullptr indicating hit in buffer
-        record_access_stats(memref, true, nullptr);
         uint8_t start = memref.data.addr - base_address;
         uint8_t end =
             start + memref.data.size; // points to the one after, but end is exclusive
@@ -332,8 +331,7 @@ vcl_caching_device_t::handle_candidate_blocks(
         uint8_t next_block = cache_block->size_ + cache_block->offset_;
         if (cache_block->validity_ && cache_block->offset_ <= start &&
             end <= next_block) {
-            // TODO: hit
-            record_access_stats(memref, true, cache_block);
+            // [DONE] hit
             ((cache_t *)cache_)->access_update(block_idx, way);
             *containing_block = cache_block;
             return false;
