@@ -208,6 +208,15 @@ private:
     std::pair<int, int>
     start_and_end_oracle(addr_t address);
     bool
+    check_vcl_buffer(const memref_t &memref);
+    void
+    handle_miss(const memref_t &memref, const addr_t &tag);
+    bool
+    handle_candidate_blocks(
+        std::vector<std::pair<caching_device_block_t *, int>> &block_ways,
+        const memref_t &memref, vcl_caching_device_block_t **containing_block,
+        const addr_t &tag);
+    bool
     read_n_oracle_lines(size_t n);
     std::map<addr_t, std::set<std::pair<addr_t, addr_t>, AddrBlockCmp>>
         base_address_to_blocks_mapping;

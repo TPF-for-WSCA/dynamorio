@@ -242,6 +242,141 @@ vcl_caching_device_t::insert_cacheblock(vcl_caching_device_block_t *cache_block)
     }
 }
 
+bool
+vcl_caching_device_t::check_vcl_buffer(const memref_t &memref)
+{
+    auto base_address = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
+    auto result = std::find_if(fifo_buffer.begin(), fifo_buffer.end(),
+                               [base_address](const std::pair<addr_t, uint64_t> &val) {
+                                   return val.first == base_address;
+                               });
+    if (result == fifo_buffer.end()) {
+        return true;
+    } else {
+        // nullptr indicating hit in buffer
+        record_access_stats(memref, true, nullptr);
+        uint8_t start = memref.data.addr - base_address;
+        uint8_t end =
+            start + memref.data.size; // points to the one after, but end is exclusive
+        result->second = set_accessed(result->second, start, end); // [start, end[
+        return false;
+    }
+}
+
+void
+vcl_caching_device_t::handle_miss(const memref_t &memref, const addr_t &tag)
+{
+    // TODO: put out into separate func - check which params are needed
+
+    int block_idx = compute_block_idx(tag);
+    auto base_address = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
+    uint8_t start = memref.data.addr - base_address;
+    uint8_t end =
+        start + memref.data.size; // points to the one after, but end is exclusive
+    std::pair<addr_t, uint64_t> *to_insert = nullptr;
+    if (!fifo_buffer.empty()) {
+        to_insert = &fifo_buffer.front();
+    }
+
+    // Fetch before inserting into buffer
+    if (parent_ != NULL) {
+        parent_->request(memref);
+    }
+    if (snoop_filter_ != NULL) {
+        snoop_filter_->snoop(tag, id_, (memref.data.type == TRACE_TYPE_WRITE));
+    }
+
+    // TODO: Keep data if we eagerly evict
+    auto bitmask = set_accessed(0, start, end);
+    fifo_buffer.push(std::pair<addr_t, uint64_t>(base_address, bitmask));
+
+    // we have a candidate to insert into the cache
+    if (to_insert != nullptr && (*to_insert) != fifo_buffer.front()) {
+        vcl_caching_device_block_t *cache_block = nullptr;
+        auto blocks = get_start_end_of_bitmask(to_insert->second);
+        // TODO: handle holes ...
+        /* +1 for size, data.addr to adjust for overlapping */
+        int size = blocks.back().second - blocks.front().first + 1;
+        auto way = replace_which_way(block_idx, size);
+        cache_block =
+            (vcl_caching_device_block_t *)&get_caching_device_block(block_idx, way);
+        // we have something to insert...
+        insert_cacheblock(cache_block);
+        update_tag(cache_block, way, tag);
+        uint8_t max_offset = 64 - cache_block->size_;
+        // we will not start later in the cacheline than that
+        cache_block->offset_ = std::min(start, max_offset);
+        ((cache_t *)cache_)->access_update(block_idx, way);
+    }
+}
+
+bool
+vcl_caching_device_t::handle_candidate_blocks(
+    std::vector<std::pair<caching_device_block_t *, int>> &block_ways,
+    const memref_t &memref, vcl_caching_device_block_t **containing_block,
+    const addr_t &tag)
+{
+    int block_idx = compute_block_idx(tag);
+    auto base_address = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
+    uint8_t start = memref.data.addr - base_address;
+    uint8_t end =
+        start + memref.data.size; // points to the one after, but end is exclusive
+
+    for (auto &block_way : block_ways) {
+        // We can ever hit in one - we ensure this by not inserting overlapping
+        // regions
+        // Update start and end if we hit in overlapping regions
+        auto cache_block = (vcl_caching_device_block_t *)
+                               block_way.first; // we only store vcl blocks in vcl cache
+        auto way = block_way.second;
+        uint8_t next_block = cache_block->size_ + cache_block->offset_;
+        if (cache_block->validity_ && cache_block->offset_ <= start &&
+            end <= next_block) {
+            // TODO: hit
+            record_access_stats(memref, true, cache_block);
+            ((cache_t *)cache_)->access_update(block_idx, way);
+            *containing_block = cache_block;
+            return false;
+        }
+        // Old impossible implementation kept for reference (for now)
+        // else if (cache_block->validity_ && cache_block->offset_ <= start &&
+        //            start < next_block) {
+        //     // we overlap partially - handle non-stored part [DONE]
+        //     // NOTE: It is possible that we have a part of one instruction in
+        //     one
+        //     // cacheline and the other part in the next one - this is perfectly
+        //     // fine for x86 and has been that way even for default cache sizes
+        //     memref.data.addr =
+        //         baseaddr + cache_block->offset_ + cache_block->size_;
+        //     memref.data.size = memref.data.size -
+        //         (cache_block->offset_ + cache_block->size_ - start);
+        //     start = memref.data.addr - baseaddr;
+        //     if (memref.data.size > MAX_X86_INSTR_SIZE) {
+        //         std::cout << "WHAT THE FCK HAPPENED" << std::endl;
+        //     }
+        //     missed = true;
+        //     partial_match = true;
+        // } else if (cache_block->validity_ && cache_block->offset_ <= end &&
+        //            end < next_block) {
+        //
+        //    // Handle overlapping in the end instead of the beginning. [DONE]
+        //    memref.data.size -= (end - cache_block->offset_ + 1);
+        //    partial_match = true;
+        //
+        //} else if (cache_block->validity_ && start <= cache_block->offset_ &&
+        //           (next_block - 1) <= end) {
+        //    // Handle case where cache block contains proper subset of memref
+        //    TODO std::cout
+        //        << "CACHEBLOCK RIPPING HOLE INTO MEMREF -- DOES THIS EVEN
+        //        HAPPEN"
+        //        << std::endl;
+        //}
+    }
+
+    // We are not contained - check vcl buffer
+    return check_vcl_buffer(memref);
+}
+
 void
 vcl_caching_device_t::request(_memref_t const &memref_in)
 {
@@ -249,8 +384,6 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
     addr_t final_addr = memref_in.data.addr + memref_in.data.size - 1;
     addr_t final_tag = compute_tag(final_addr);
     addr_t tag = compute_tag(memref_in.data.addr);
-    addr_t baseaddr = memref_in.data.addr & _CACHELINE_BASEADDRESS_MASK;
-
     // Note: the tag still contains the index bits here
     // if (tag < final_tag) {
     //     std::cout << "tag: " << tag << "; final tag: " << final_tag << std::endl;
@@ -258,139 +391,28 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
 
     memref = memref_in;
     for (; tag <= final_tag; ++tag) {
-        int way = associativity_;
-        int block_idx = compute_block_idx(tag);
-
         bool missed = false;
+        vcl_caching_device_block_t *cache_block = nullptr;
+
         if (tag + 1 <= final_tag) {
             memref.data.size = ((tag + 1) << block_size_bits_) -
                 memref.data.addr; // is this good enough?
         }
+
         if (memref.data.size > MAX_X86_INSTR_SIZE) {
             std::cout << "WTF" << std::endl;
         }
 
-        baseaddr = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
-        uint8_t start = memref.data.addr - baseaddr;
-        uint8_t end = start + memref.data.size - 1; // last bytes offset
         auto block_ways = find_all_caching_device_blocks(memref.data.addr, false, true);
         if (block_ways.size() > 0) {
-            // found - we are in range
-            // if (block_ways.size() > 1) {
-            //     std::cout << "we now should definitely only have one inlier if we
-            //     evict"
-            //               << std::endl;
-            // }
-            vcl_caching_device_block_t *cache_block = nullptr;
-            for (auto &block_way : block_ways) {
-                // We can ever hit in one - we ensure this by not inserting overlapping
-                // regions
-                // Update start and end if we hit in overlapping regions
-                start = memref.data.addr - baseaddr;
-                end = start + memref.data.size - 1; // last bytes offset
-                cache_block =
-                    (vcl_caching_device_block_t *)
-                        block_way.first; // we only store vcl blocks in vcl cache
-                way = block_way.second;
-                auto next_block = cache_block->size_ + cache_block->offset_;
-                if (cache_block->validity_ && cache_block->offset_ <= start &&
-                    end < next_block) {
-                    // TODO: hit
-                    record_access_stats(memref, true, cache_block);
-                    ((cache_t *)cache_)->access_update(block_idx, way);
-                    missed = false;
-                    break;
-                } else {
-                    // we are not contained - handle a miss [DONE]
-                    missed = true;
-                }
-                // Old impossible implementation kept for reference (for now)
-                // else if (cache_block->validity_ && cache_block->offset_ <= start &&
-                //            start < next_block) {
-                //     // we overlap partially - handle non-stored part [DONE]
-                //     // NOTE: It is possible that we have a part of one instruction in
-                //     one
-                //     // cacheline and the other part in the next one - this is perfectly
-                //     // fine for x86 and has been that way even for default cache sizes
-                //     memref.data.addr =
-                //         baseaddr + cache_block->offset_ + cache_block->size_;
-                //     memref.data.size = memref.data.size -
-                //         (cache_block->offset_ + cache_block->size_ - start);
-                //     start = memref.data.addr - baseaddr;
-                //     if (memref.data.size > MAX_X86_INSTR_SIZE) {
-                //         std::cout << "WHAT THE FCK HAPPENED" << std::endl;
-                //     }
-                //     missed = true;
-                //     partial_match = true;
-                // } else if (cache_block->validity_ && cache_block->offset_ <= end &&
-                //            end < next_block) {
-                //
-                //    // Handle overlapping in the end instead of the beginning. [DONE]
-                //    memref.data.size -= (end - cache_block->offset_ + 1);
-                //    partial_match = true;
-                //
-                //} else if (cache_block->validity_ && start <= cache_block->offset_ &&
-                //           (next_block - 1) <= end) {
-                //    // Handle case where cache block contains proper subset of memref
-                //    TODO std::cout
-                //        << "CACHEBLOCK RIPPING HOLE INTO MEMREF -- DOES THIS EVEN
-                //        HAPPEN"
-                //        << std::endl;
-                //}
-            }
+            missed = handle_candidate_blocks(block_ways, memref, &cache_block, tag);
         } else {
             // check buffer
-            auto result = std::find_if(
-                fifo_buffer.begin(), fifo_buffer.end(),
-                [memref](const std::pair<addr_t, uint64_t> &val) {
-                    return val.first == (memref.data.addr & _CACHELINE_BASEADDRESS_MASK);
-                });
-            if (result == fifo_buffer.end()) {
-                missed = true;
-            } else {
-                // nullptr indicating hit in buffer
-                record_access_stats(memref, true, nullptr);
-                result->second = set_accessed(result->second, start, (end + 1));
-            }
+            missed = check_vcl_buffer(memref);
         }
 
         if (missed) {
-            // TODO: put out into separate func - check which params are needed
-            std::pair<addr_t, uint64_t> *to_insert = nullptr;
-            if (!fifo_buffer.empty()) {
-                to_insert = &fifo_buffer.front();
-            }
-
-            // Fetch before inserting into buffer
-            if (parent_ != NULL) {
-                parent_->request(memref);
-            }
-            if (snoop_filter_ != NULL) {
-                snoop_filter_->snoop(tag, id_, (memref.data.type == TRACE_TYPE_WRITE));
-            }
-
-            // TODO: Keep data if we eagerly evict
-            auto bitmask = set_accessed(0, start, (end + 1));
-            fifo_buffer.push(std::pair<addr_t, uint64_t>(baseaddr, bitmask));
-
-            if (to_insert != nullptr && (*to_insert) != fifo_buffer.front()) {
-                vcl_caching_device_block_t *cache_block = nullptr;
-                auto blocks = get_start_end_of_bitmask(to_insert->second);
-                // TODO: handle holes ...
-                /* +1 for size, data.addr to adjust for overlapping */
-                int size = blocks.back().second - blocks.front().first + 1;
-                way = replace_which_way(block_idx, size);
-                cache_block = (vcl_caching_device_block_t *)&get_caching_device_block(
-                    block_idx, way);
-                // we have something to insert...
-                insert_cacheblock(cache_block);
-                update_tag(cache_block, way, tag);
-                uint8_t max_offset = 64 - cache_block->size_;
-                // we will not start later in the cacheline than that
-                cache_block->offset_ = std::min(start, max_offset);
-                record_access_stats(memref, false, cache_block);
-                ((cache_t *)cache_)->access_update(block_idx, way);
-            }
+            handle_miss(memref, tag);
         }
 
         if (missed && !type_is_prefetch(memref.data.type) && prefetcher_ != nullptr) {
@@ -405,6 +427,7 @@ vcl_caching_device_t::request(_memref_t const &memref_in)
         if (memref.data.size > MAX_X86_INSTR_SIZE) {
             std::cout << "WTF" << std::endl;
         }
+        record_access_stats(memref, !missed, cache_block);
     }
 }
 
@@ -526,8 +549,8 @@ vcl_caching_device_t::find_all_caching_device_blocks(addr_t addr, bool only_one,
         if ((block->tag_ == tag && startaddr < addr && addr <= endaddr) ||
             !check_inlier) {
             candidate_blocks.push_back(std::make_pair(block, way));
-            if (only_one)
-                return candidate_blocks; // we only get here once before returning
+            if (only_one && check_inlier)
+                return candidate_blocks;
         }
     }
     return candidate_blocks; // its a miss if empty
