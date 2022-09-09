@@ -37,6 +37,17 @@
 // The count value 0 means the most recent access, and the cache line with the
 // highest counter value will be picked for replacement in replace_which_way.
 
+void
+cache_lru_t::initialize_blocks()
+{
+    // Initialize line counters with 0, 1, 2, ..., associativity - 1.
+    for (int i = 0; i < self_->num_sets_; i++) {
+        for (int way = 0; way < self_->associativity_; ++way) {
+            self_->get_caching_device_block(i << self_->assoc_bits_, way)->counter_ = way;
+        }
+    }
+}
+
 bool
 cache_lru_t::init(int associativity, int block_size, int total_size,
                   I_caching_device_t *parent, caching_device_stats_t *stats,
@@ -53,29 +64,46 @@ cache_lru_t::init(int associativity, int block_size, int total_size,
     if (ret_val == false)
         return false;
 
-    // Initialize line counters with 0, 1, 2, ..., associativity - 1.
-    for (int i = 0; i < self_->num_sets_; i++) {
-        for (int way = 0; way < self_->associativity_; ++way) {
-            self_->get_caching_device_block(i << self_->assoc_bits_, way).counter_ = way;
-        }
+    initialize_blocks();
+
+    return true;
+}
+bool
+cache_lru_t::init(int associativity, std::vector<int> line_sizes, int num_sets,
+                  I_caching_device_t *parent, caching_device_stats_t *stats,
+                  prefetcher_t *prefetcher, bool inclusive, bool coherent_cache, int id,
+                  snoop_filter_t *snoop_filter,
+                  const std::vector<I_caching_device_t *> &children)
+{
+    // TODO: How to adjust such that the cache size is nicely divisible by the set size
+    // e.g. largest line is 64, was a 8 way cache: we still have size / 8*8
+    bool ret_val =
+        self_->init(associativity, line_sizes, num_sets, parent, stats, prefetcher,
+                    inclusive, coherent_cache, id, snoop_filter, children);
+    if (!ret_val) {
+        return false;
     }
+
+    initialize_blocks();
+
     return true;
 }
 
 void
 cache_lru_t::access_update(int block_idx, int way)
 {
-    int cnt = self_->get_caching_device_block(block_idx, way).counter_;
+    // TODO: CHECK WITH UPSTREAM.
+    int cnt = self_->get_caching_device_block(block_idx, way)->counter_;
     // Optimization: return early if it is a repeated access.
     if (cnt == 0)
         return;
     // We inc all the counters that are not larger than cnt for LRU.
     for (int i = 0; i < self_->associativity_; ++i) {
-        if (i != way && self_->get_caching_device_block(block_idx, i).counter_ <= cnt)
-            self_->get_caching_device_block(block_idx, i).counter_++;
+        if (i != way && self_->get_caching_device_block(block_idx, i)->counter_ <= cnt)
+            self_->get_caching_device_block(block_idx, i)->counter_++;
     }
     // Clear the counter for LRU.
-    self_->get_caching_device_block(block_idx, way).counter_ = 0;
+    self_->get_caching_device_block(block_idx, way)->counter_ = 0;
 }
 
 int
@@ -91,12 +119,12 @@ cache_lru_t::get_next_way_to_replace(int block_idx) const
     int max_counter = 0;
     int max_way = 0;
     for (int way = 0; way < self_->associativity_; ++way) {
-        if (self_->get_caching_device_block(block_idx, way).tag_ == TAG_INVALID) {
+        if (self_->get_caching_device_block(block_idx, way)->tag_ == TAG_INVALID) {
             max_way = way;
             break;
         }
-        if (self_->get_caching_device_block(block_idx, way).counter_ > max_counter) {
-            max_counter = self_->get_caching_device_block(block_idx, way).counter_;
+        if (self_->get_caching_device_block(block_idx, way)->counter_ > max_counter) {
+            max_counter = self_->get_caching_device_block(block_idx, way)->counter_;
             max_way = way;
         }
     }

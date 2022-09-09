@@ -145,10 +145,10 @@ protected:
         return -1; // todo
 #endif
     }
-    inline caching_device_block_t &
+    inline caching_device_block_t *
     get_caching_device_block(int block_idx, int way) const override
     {
-        return *(blocks_[block_idx + way]);
+        return blocks_[block_idx + way];
     }
 
     inline void
@@ -160,7 +160,7 @@ protected:
 
         block->tag_ = TAG_INVALID;
         block->validity_ = false;
-        block->counter_ = 0;
+        block->counter_ = 0; // 0 out: next that gets in will be the MRU
     }
     inline int
     get_smallest_possible_way(int size)

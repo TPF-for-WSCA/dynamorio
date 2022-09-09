@@ -94,7 +94,7 @@ public:
     compute_tag(addr_t addr) const = 0;
     virtual int
     compute_block_idx(addr_t tag) const = 0;
-    virtual caching_device_block_t &
+    virtual caching_device_block_t *
     get_caching_device_block(int block_idx, int way) const = 0;
 
     virtual inline void

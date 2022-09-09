@@ -299,7 +299,7 @@ vcl_caching_device_t::handle_miss(const memref_t &memref, const addr_t &tag)
         int size = blocks.back().second - blocks.front().first + 1;
         auto way = replace_which_way(block_idx, size);
         cache_block =
-            (vcl_caching_device_block_t *)&get_caching_device_block(block_idx, way);
+            (vcl_caching_device_block_t *)get_caching_device_block(block_idx, way);
         // we have something to insert...
         insert_cacheblock(cache_block);
         update_tag(cache_block, way, tag);
@@ -497,13 +497,13 @@ vcl_caching_device_t::replace_which_way(int block_idx, int size)
     //     candidate_sizes_and_idx; // We use it as <size, idx>. All INVALID lines are
     //                              // candidates + LRU candidate
     for (int way = first_viable_way; way < associativity_; ++way) {
-        if (get_caching_device_block(block_idx, way).tag_ == TAG_INVALID) {
+        if (get_caching_device_block(block_idx, way)->tag_ == TAG_INVALID) {
             max_way = way; // we found an empty way - use this
             break;
         }
         if (way == first_viable_way ||
-            get_caching_device_block(block_idx, way).counter_ > max_counter) {
-            max_counter = get_caching_device_block(block_idx, way).counter_;
+            get_caching_device_block(block_idx, way)->counter_ > max_counter) {
+            max_counter = get_caching_device_block(block_idx, way)->counter_;
             max_way = way;
         }
     }
@@ -542,12 +542,12 @@ vcl_caching_device_t::find_all_caching_device_blocks(addr_t addr, bool only_one,
     std::vector<std::pair<caching_device_block_t *, int>> candidate_blocks;
     for (int way = 0; way < associativity_; ++way) {
         vcl_caching_device_block_t *block =
-            (vcl_caching_device_block_t *)&get_caching_device_block(blockidx, way);
+            (vcl_caching_device_block_t *)get_caching_device_block(blockidx, way);
         // TODO: Check if < or <=
         addr_t startaddr = (addr & _CACHELINE_BASEADDRESS_MASK) + block->offset_;
         addr_t endaddr = startaddr + block->size_;
-        if ((block->tag_ == tag && startaddr < addr && addr <= endaddr) ||
-            !check_inlier) {
+        if (block->tag_ == tag &&
+            ((startaddr < addr && addr <= endaddr) || !check_inlier)) {
             candidate_blocks.push_back(std::make_pair(block, way));
             if (only_one && check_inlier)
                 return candidate_blocks;

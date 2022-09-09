@@ -57,7 +57,7 @@ cache_fifo_t::init(int associativity, int block_size, int total_size,
     // Create a replacement pointer for each set, and
     // initialize it to point to the first block.
     for (int i = 0; i < self_->num_sets_; i++) {
-        self_->get_caching_device_block(i << self_->assoc_bits_, 0).counter_ = 1;
+        self_->get_caching_device_block(i << self_->assoc_bits_, 0)->counter_ = 1;
     }
     return true;
 }
@@ -81,12 +81,12 @@ cache_fifo_t::replace_which_way(int block_idx)
     if (victim_way == -1)
         return -1;
     // clear the counter of the victim block
-    self_->get_caching_device_block(block_idx, victim_way).counter_ = 0;
+    self_->get_caching_device_block(block_idx, victim_way)->counter_ = 0;
     // set the next block as victim
     self_
         ->get_caching_device_block(block_idx,
                                    (victim_way + 1) & (self_->associativity_ - 1))
-        .counter_ = 1;
+        ->counter_ = 1;
     return victim_way;
 }
 
@@ -97,7 +97,7 @@ cache_fifo_t::get_next_way_to_replace(const int block_idx) const
 {
     for (int i = 0; i < self_->associativity_; i++) {
         // We return the block whose counter is 1.
-        if (self_->get_caching_device_block(block_idx, i).counter_ == 1) {
+        if (self_->get_caching_device_block(block_idx, i)->counter_ == 1) {
             return i;
         }
     }

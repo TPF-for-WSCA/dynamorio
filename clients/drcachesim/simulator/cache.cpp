@@ -111,7 +111,7 @@ cache_t::flush(const memref_t &memref)
 void
 cache_t::access_update(int block_idx, int way)
 {
-    self_->get_caching_device_block(block_idx, way).counter_++;
+    self_->get_caching_device_block(block_idx, way)->counter_++;
 };
 
 int

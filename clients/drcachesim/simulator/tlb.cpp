@@ -69,7 +69,7 @@ tlb_t::request(const memref_t &memref_in)
     if (tag == final_tag && tag == last_tag_ && pid == last_pid_) {
         // Make sure last_tag_ and pid are properly in sync.
         caching_device_block_t *tlb_entry =
-            &get_caching_device_block(last_block_idx_, last_way_);
+            get_caching_device_block(last_block_idx_, last_way_);
         assert(tag != TAG_INVALID && tag == tlb_entry->tag_ &&
                pid == ((tlb_entry_t *)tlb_entry)->pid_);
         record_access_stats(memref_in, true /*hit*/, tlb_entry);
@@ -86,7 +86,7 @@ tlb_t::request(const memref_t &memref_in)
             memref.data.size = ((tag + 1) << block_size_bits_) - memref.data.addr;
 
         for (way = 0; way < associativity_; ++way) {
-            caching_device_block_t *tlb_entry = &get_caching_device_block(block_idx, way);
+            caching_device_block_t *tlb_entry = get_caching_device_block(block_idx, way);
             if (tlb_entry->tag_ == tag && ((tlb_entry_t *)tlb_entry)->pid_ == pid) {
                 record_access_stats(memref, true /*hit*/, tlb_entry);
                 break;
@@ -95,7 +95,7 @@ tlb_t::request(const memref_t &memref_in)
 
         if (way == associativity_) {
             way = replace_which_way(block_idx);
-            caching_device_block_t *tlb_entry = &get_caching_device_block(block_idx, way);
+            caching_device_block_t *tlb_entry = get_caching_device_block(block_idx, way);
 
             record_access_stats(memref, false /*miss*/, tlb_entry);
             // If no parent we assume we get the data from main memory

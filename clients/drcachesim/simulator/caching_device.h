@@ -144,10 +144,10 @@ public:
     {
         return (tag & set_idx_mask_) << assoc_bits_;
     }
-    virtual inline caching_device_block_t &
+    virtual inline caching_device_block_t *
     get_caching_device_block(int block_idx, int way) const override
     {
-        return *(blocks_[block_idx + way]);
+        return blocks_[block_idx + way];
     }
 
     virtual inline void

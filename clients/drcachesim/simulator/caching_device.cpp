@@ -128,9 +128,9 @@ caching_device_t::find_caching_device_block(addr_t tag)
     }
     int block_idx = compute_block_idx(tag);
     for (int way = 0; way < associativity_; ++way) {
-        caching_device_block_t &block = get_caching_device_block(block_idx, way);
-        if (block.tag_ == tag)
-            return std::make_pair(&block, way);
+        caching_device_block_t *block = get_caching_device_block(block_idx, way);
+        if (block->tag_ == tag)
+            return std::make_pair(block, way);
     }
     return std::make_pair(nullptr, 0);
 }
@@ -158,7 +158,7 @@ caching_device_t::request(const memref_t &memref_in)
     if (tag == final_tag && tag == last_tag_ && memref_in.data.type != TRACE_TYPE_WRITE) {
         // Make sure last_tag_ is properly in sync.
         caching_device_block_t *cache_block =
-            &get_caching_device_block(last_block_idx_, last_way_);
+            get_caching_device_block(last_block_idx_, last_way_);
         assert(tag != TAG_INVALID && tag == cache_block->tag_);
         record_access_stats(memref_in, true /*hit*/, cache_block);
         ((cache_t *)cache_)->access_update(last_block_idx_, last_way_);
@@ -195,7 +195,7 @@ caching_device_t::request(const memref_t &memref_in)
             // Access is a miss.
             way = replace_which_way(block_idx);
             caching_device_block_t *cache_block =
-                &get_caching_device_block(block_idx, way);
+                get_caching_device_block(block_idx, way);
 
             record_access_stats(memref, false /*miss*/, cache_block);
             missed = true;
@@ -272,7 +272,7 @@ caching_device_t::replace_which_way(int block_idx)
 {
     int min_way = get_next_way_to_replace(block_idx);
     // Clear the counter for LFU.
-    get_caching_device_block(block_idx, min_way).counter_ = 0;
+    get_caching_device_block(block_idx, min_way)->counter_ = 0;
     return min_way;
 }
 
@@ -285,12 +285,13 @@ caching_device_t::get_next_way_to_replace(const int block_idx) const
     int min_counter = 0; /* avoid "may be used uninitialized" with GCC 4.4.7 */
     int min_way = 0;
     for (int way = 0; way < associativity_; ++way) {
-        if (get_caching_device_block(block_idx, way).tag_ == TAG_INVALID) {
+        if (get_caching_device_block(block_idx, way)->tag_ == TAG_INVALID) {
             min_way = way;
             break;
         }
-        if (way == 0 || get_caching_device_block(block_idx, way).counter_ < min_counter) {
-            min_counter = get_caching_device_block(block_idx, way).counter_;
+        if (way == 0 ||
+            get_caching_device_block(block_idx, way)->counter_ < min_counter) {
+            min_counter = get_caching_device_block(block_idx, way)->counter_;
             min_way = way;
         }
     }
