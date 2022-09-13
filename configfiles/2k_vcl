@@ -17,12 +17,12 @@ P0L1I {                        // P0 L1 instruction cache
   parent          P0L2
   replace_policy  LRU
   line_sizes      [
-    7,
-    10,
-    17,
-    25,
+    8,
+    15,
+    23,
     32,
-    56,
+    47,
+    64,
     64,
     64,
   ]  // number of entries here = number of ways/associativity
