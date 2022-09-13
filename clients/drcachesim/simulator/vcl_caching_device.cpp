@@ -174,6 +174,7 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
         std::log2(associativity_)); // TODO: Why do we need power of 2 number of ways?
     block_sizes_bits_.reserve(block_sizes_.size());
     block_size_bits_ = compute_log2(block_size_);
+    fifo_buffer.init(num_sets);
 
     for (const auto &block_size : block_sizes_) {
         block_sizes_bits_.push_back(std::ceil(std::log2(block_size)));

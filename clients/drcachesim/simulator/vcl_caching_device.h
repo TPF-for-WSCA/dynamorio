@@ -9,6 +9,7 @@
 #include <queue>
 #include <deque>
 #include <fstream>
+#include <stdexcept>
 #include "vcl_caching_device_block.h"
 
 struct AddrBlockCmp {
@@ -24,16 +25,31 @@ struct AddrBlockCmp {
 };
 
 // Quick and dirty: fixed queue with search
-template <typename T, int length> class FIFOQueue : public std::deque<T> {
+template <typename T> class FIFOQueue : public std::deque<T> {
 public:
+    void
+    init(size_t length)
+    {
+        this->length = length;
+        initialized = true;
+    }
+
     void
     push(const T &value)
     {
+        if (!initialized) {
+            std::cerr << "FIFOQueue not initialized. Call init(len) first." << std::endl;
+            throw std::length_error("FIFOQueue not initialized - length is 0");
+        }
         if (this->size() == length) {
             this->pop_front();
         }
         std::deque<T>::push_back(value);
     }
+
+private:
+    size_t length = 0;
+    bool initialized = false;
 };
 
 class vcl_caching_device_t : public I_caching_device_t {
@@ -204,7 +220,7 @@ private:
     insert_cacheblock(vcl_caching_device_block_t *cache_block);
     std::string perfect_prefetching_path;
     // TODO: make fifo buffer size configurable
-    FIFOQueue<std::pair<addr_t, uint64_t>, 64> fifo_buffer;
+    FIFOQueue<std::pair<addr_t, uint64_t>> fifo_buffer;
     std::pair<int, int>
     start_and_end_oracle(addr_t address);
     bool
