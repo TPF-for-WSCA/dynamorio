@@ -5,7 +5,7 @@ num_cores       1
 line_size       64
 cpu_scheduling  true
 sim_refs        1000000000000
-warmup_fraction 0.001
+warmup_fraction 0.01
 data_dir        /home/robrunne/Workspace/TracesDatasets/Google/charlie/trace-1/
 
 // Cache params.
@@ -18,7 +18,7 @@ P0L1I {                        // P0 L1 instruction cache
   replace_policy  LRU
   line_sizes      [
     8,
-    15,
+    14,
     23,
     32,
     48,

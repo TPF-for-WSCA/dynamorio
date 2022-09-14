@@ -174,7 +174,10 @@ vcl_caching_device_t::init(int associativity, std::vector<int> &way_sizes, int n
         std::log2(associativity_)); // TODO: Why do we need power of 2 number of ways?
     block_sizes_bits_.reserve(block_sizes_.size());
     block_size_bits_ = compute_log2(block_size_);
-    fifo_buffer.init(num_sets);
+    // For any reasonable cache this keeps us in a range between 1 and 10 for the buffer
+    // size (L1-I, for data this can go up quite a bit higher, often ~ 20 buffer entries)
+    int buffer_size = (int)std::ceil(std::log2(num_sets));
+    fifo_buffer.init(std::max(1, buffer_size));
 
     for (const auto &block_size : block_sizes_) {
         block_sizes_bits_.push_back(std::ceil(std::log2(block_size)));
