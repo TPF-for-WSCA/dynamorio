@@ -15,17 +15,17 @@ P0L1I {                        // P0 L1 instruction cache
   core            0
   size            32768 // 131072        // 32K
   parent          P0L2
+  assoc           8 // just to test if it fails
   replace_policy  LRU
   line_sizes      [
-                    6,
-                    9,
-                    14,
-                    20,
-                    29,
-                    43,
-                    64,
-                    64,
-                  ]  // number of entries here = number of ways/associativity
+    8,
+    15,
+    23,
+    32,
+    46,
+    64,
+    64,
+  ]  // number of entries here = number of ways/associativity
   num_sets        64 
 }
 P0L1D {                        // P0 L1 data cache

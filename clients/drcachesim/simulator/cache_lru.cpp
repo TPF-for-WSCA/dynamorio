@@ -43,7 +43,8 @@ cache_lru_t::initialize_blocks()
     // Initialize line counters with 0, 1, 2, ..., associativity - 1.
     for (int i = 0; i < self_->num_sets_; i++) {
         for (int way = 0; way < self_->associativity_; ++way) {
-            self_->get_caching_device_block(i << self_->assoc_bits_, way)->counter_ = way;
+            self_->get_caching_device_block(i * self_->associativity_, way)->counter_ =
+                way;
         }
     }
 }

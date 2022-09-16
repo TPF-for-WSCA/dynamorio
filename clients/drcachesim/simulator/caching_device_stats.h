@@ -49,6 +49,7 @@
 enum invalidation_type_t {
     INVALIDATION_INCLUSIVE,
     INVALIDATION_COHERENCE,
+    INVALIDATION_BUFFER
 };
 
 enum class metric_name_t {

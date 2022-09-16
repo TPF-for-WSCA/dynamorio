@@ -52,12 +52,15 @@ public:
     // where for the current replacement code we also set the counter at that time.
     vcl_caching_device_block_t()
         : caching_device_block_t()
+        , predicted_size_(0)
     {
     }
     // Destructor must be virtual and default is not.
     virtual ~vcl_caching_device_block_t()
     {
     }
+
+    uint predicted_size_;
 };
 
 #endif /* _VCL_CACHING_DEVICE_BLOCK_H_ */

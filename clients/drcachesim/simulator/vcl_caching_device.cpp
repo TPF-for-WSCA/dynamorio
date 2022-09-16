@@ -272,6 +272,7 @@ vcl_caching_device_t::handle_miss(const memref_t &memref, const addr_t &tag)
     // TODO: put out into separate func - check which params are needed
 
     int block_idx = compute_block_idx(tag);
+    this->invalidate(tag, INVALIDATION_BUFFER);
     auto base_address = memref.data.addr & _CACHELINE_BASEADDRESS_MASK;
     uint8_t start = memref.data.addr - base_address;
     uint8_t end =
@@ -299,17 +300,20 @@ vcl_caching_device_t::handle_miss(const memref_t &memref, const addr_t &tag)
         auto blocks = get_start_end_of_bitmask(to_insert->second);
         // TODO: handle holes ...
         /* +1 for size, data.addr to adjust for overlapping */
-        int size = blocks.back().second - blocks.front().first + 1;
-        auto way = replace_which_way(block_idx, size);
-        cache_block =
-            (vcl_caching_device_block_t *)get_caching_device_block(block_idx, way);
-        // we have something to insert...
-        insert_cacheblock(cache_block);
-        update_tag(cache_block, way, tag);
-        uint8_t max_offset = 64 - cache_block->size_;
-        // we will not start later in the cacheline than that
-        cache_block->offset_ = std::min(start, max_offset);
-        ((cache_t *)cache_)->access_update(block_idx, way);
+        for (const auto &block : blocks) {
+            int size = block.second - block.first + 1;
+            auto way = replace_which_way(block_idx, size);
+            cache_block =
+                (vcl_caching_device_block_t *)get_caching_device_block(block_idx, way);
+            cache_block->predicted_size_ = size;
+            // we have something to insert...
+            insert_cacheblock(cache_block);
+            update_tag(cache_block, way, tag);
+            uint8_t max_offset = 64 - cache_block->size_;
+            // we will not start later in the cacheline than that
+            cache_block->offset_ = std::min(start, max_offset);
+            ((cache_t *)cache_)->access_update(block_idx, way);
+        }
     }
 }
 
